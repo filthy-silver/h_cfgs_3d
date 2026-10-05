@@ -565,6 +565,14 @@
   // Ejecutar al cargar la página y al redimensionar la ventana
   window.addEventListener('resize', actualizarAccesibilidad);
   actualizarAccesibilidad();
+  if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch((err) => {
+      console.error('Error registrando Service Worker:', err);
+    });
+  });
+ 
+  }
 </script>
 </body>
 </html>
