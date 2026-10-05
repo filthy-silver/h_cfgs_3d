@@ -357,7 +357,7 @@
   function renderTable() {
     const tbody = document.getElementById("tbody");
     tbody.innerHTML = "";
-    
+
     for (let p = 0; p < T.length - 1; p++) {
       const tr = document.createElement("tr");
       const time = document.createElement("td");
@@ -377,17 +377,17 @@
           if (ev) {
             const td = document.createElement("td");
             td.className = "slot";
-            td.rowSpan = ev.to - ev.from; 
+            td.rowSpan = ev.to - ev.from;
             td.style.setProperty("--c", colorOf(ev.mod));
-            
+
             const title = document.createElement("span");
             title.className = "slot-title";
             title.textContent = ev.name;
-            
+
             const meta = document.createElement("span");
             meta.className = "slot-meta";
             meta.textContent = ev.meta;
-            
+
             td.append(title, meta);
             tr.appendChild(td);
           } else if (!events[d].some(e => e.from < p && p < e.to)) {
@@ -539,6 +539,27 @@
   renderTable();
   renderTimeline(selectedMobileDay);
   loop();
+  function actualizarAccesibilidad() {
+    const esMovil = window.matchMedia('(max-width: 767px)').matches;
+    const tabla = document.querySelector('.table-wrapper');
+    const timeline = document.querySelector('.timeline-view');
+
+    if (esMovil) {
+      // Oculta la tabla a los lectores de pantalla en móviles
+      tabla.setAttribute('aria-hidden', 'true');
+      tabla.removeAttribute('tabindex');
+      timeline.removeAttribute('aria-hidden');
+    } else {
+      // Restaura la tabla y su foco en escritorio
+      tabla.removeAttribute('aria-hidden');
+      tabla.setAttribute('tabindex', '0');
+      timeline.setAttribute('aria-hidden', 'true');
+    }
+  }
+
+  // Ejecutar al cargar la página y al redimensionar la ventana
+  window.addEventListener('resize', actualizarAccesibilidad);
+  actualizarAccesibilidad();
 </script>
 </body>
 </html>
