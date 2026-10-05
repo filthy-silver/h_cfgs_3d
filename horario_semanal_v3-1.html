@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Horario semanal</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: light-dark(#f4f6f9, #0a0e16);
+    --surface: light-dark(#ffffff, #111827);
+    --surface-2: light-dark(#eceff4, #0d1421);
+    --line: light-dark(#d3d9e2, #222d40);
+    --text: light-dark(#101828, #eef2f8);
+    --muted: light-dark(#5a6577, #94a1b5);
+    --accent: light-dark(#0369a1, #4cc2ff);
+
+    --mod-proye: #0284c7;
+    --mod-color: #d97706;
+    --mod-dibujo: #7c3aed;
+    --mod-fol: #059669;
+    --mod-inter: #db2777;
+    --mod-anim: #2563eb;
+    --mod-ingles: #64748b;
+    --mod-recreo: #475569;
+  }
+  :root[data-theme="dark"]  { color-scheme: dark; }
+  :root[data-theme="light"] { color-scheme: light; }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    min-height: 100vh;
+    padding: 2rem 1rem 3rem;
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.4;
+  }
+  .container { width: 100%; max-width: 1100px; margin: 0 auto; display: grid; gap: 1.25rem; }
+
+  /* Cabecera */
+  .top-bar { display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 1rem; }
+  h1 { font-size: 1.6rem; font-weight: 700; letter-spacing: -0.02em; }
+  #today-date { font-size: 0.85rem; color: var(--muted); margin-top: 0.15rem; text-transform: capitalize; }
+
+  .theme-selector { display: flex; padding: 3px; gap: 2px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; }
+  .theme-btn {
+    border: 0; background: transparent; color: var(--muted);
+    padding: 5px 12px; border-radius: 6px; font: inherit; font-size: 0.78rem; font-weight: 500; cursor: pointer;
+  }
+  .theme-btn.active { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: 0 0 0 1px var(--line); }
+  .theme-btn:focus-visible, .table-wrapper:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* Ahora / Siguiente (Panel superior) */
+  .status-panel { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem; }
+  .status-card {
+    --c: var(--line);
+    position: relative; overflow: hidden;
+    background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--c);
+    border-radius: 10px; padding: 1rem 1.1rem; display: grid; gap: 0.2rem;
+  }
+  .status-card .label { font-size: 0.78rem; font-weight: 600; color: var(--muted); }
+  .status-card .title { font-size: 1.1rem; font-weight: 650; }
+  .status-card .meta { font-size: 0.82rem; color: var(--muted); }
+  .status-card .timer { margin-top: 0.15rem; font-size: 0.82rem; font-weight: 600; color: var(--accent); min-height: 1.15em; }
+  .progress { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: var(--surface-2); }
+  .progress > i { display: block; height: 100%; width: 0; background: var(--c); transition: width 0.4s ease; }
+
+  /* Tabla */
+  .table-wrapper { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow-x: auto; }
+  table { width: 100%; min-width: 780px; border-collapse: collapse; table-layout: fixed; }
+  th, td { border: 1px solid var(--line); padding: 0.6rem 0.75rem; vertical-align: top; }
+  tr > :first-child { border-left: 0; }
+  tr > :last-child { border-right: 0; }
+  thead th { border-top: 0; }
+  tbody tr:last-child > * { border-bottom: 0; }
+
+  th { background: var(--surface-2); font-size: 0.82rem; font-weight: 600; color: var(--muted); text-align: center; padding: 0.7rem 0.5rem; }
+
+  .time-col {
+    width: 112px; position: sticky; left: 0; z-index: 1;
+    background: var(--surface-2); color: var(--muted);
+    font-size: 0.78rem; font-weight: 600; text-align: center; vertical-align: middle; white-space: nowrap;
+  }
+
+  td.slot {
+    --c: var(--line);
+    background: color-mix(in srgb, var(--c) 14%, transparent);
+    box-shadow: inset 4px 0 0 var(--c);
+    padding-left: 0.95rem;
+  }
+  
+  /* Celda vacía */
+  td.empty-slot {
+    background: color-mix(in srgb, var(--line) 5%, transparent);
+  }
+
+  td.break {
+    background: var(--surface-2); color: var(--muted);
+    text-align: center; vertical-align: middle; font-size: 0.8rem; font-weight: 600; padding: 0.4rem;
+  }
+
+  .slot-title { display: block; font-weight: 600; font-size: 0.88rem; line-height: 1.3; }
+  .slot-meta { display: block; margin-top: 0.25rem; font-size: 0.74rem; color: var(--muted); }
+
+  /* Leyenda */
+  .legend-bar { display: flex; flex-wrap: wrap; gap: 0.5rem 1.2rem; font-size: 0.78rem; color: var(--muted); }
+  .legend-item { display: flex; align-items: center; gap: 0.45rem; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 3px; }
+
+  @media (prefers-reduced-motion: reduce) { .progress > i { transition: none; } }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <header class="top-bar">
+    <div>
+      <h1>Horario semanal</h1>
+      <p id="today-date"></p>
+    </div>
+    <div class="theme-selector" role="group" aria-label="Modo de color">
+      <button type="button" class="theme-btn" data-mode="auto">Auto</button>
+      <button type="button" class="theme-btn" data-mode="dark">Oscuro</button>
+      <button type="button" class="theme-btn" data-mode="light">Claro</button>
+    </div>
+  </header>
+
+  <section class="status-panel" aria-live="polite">
+    <div class="status-card" id="card-now">
+      <div class="label">Ahora</div>
+      <div class="title" id="now-title">Cargando…</div>
+      <div class="meta" id="now-meta"></div>
+      <div class="timer" id="now-timer"></div>
+      <div class="progress"><i id="now-progress"></i></div>
+    </div>
+    <div class="status-card" id="card-next">
+      <div class="label">Siguiente</div>
+      <div class="title" id="next-title">Cargando…</div>
+      <div class="meta" id="next-meta"></div>
+    </div>
+  </section>
+
+  <main class="table-wrapper" tabindex="0" aria-label="Horario semanal">
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">Horario</th>
+          <th scope="col" data-day="1">Lunes</th>
+          <th scope="col" data-day="2">Martes</th>
+          <th scope="col" data-day="3">Miércoles</th>
+          <th scope="col" data-day="4">Jueves</th>
+          <th scope="col" data-day="5">Viernes</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </main>
+
+  <aside class="legend-bar" id="legend"></aside>
+</div>
+
+<script>
+  /* ───────── Tema ───────── */
+  const THEME_KEY = "user-theme-pref";
+  const MODES = ["auto", "dark", "light"];
+  const store = {
+    get() { try { return localStorage.getItem(THEME_KEY); } catch { return null; } },
+    set(v) { try { localStorage.setItem(THEME_KEY, v); } catch { } }
+  };
+  const themeBtns = document.querySelectorAll(".theme-btn");
+
+  function applyTheme(mode, save) {
+    const root = document.documentElement;
+    if (mode === "auto") root.removeAttribute("data-theme");
+    else root.setAttribute("data-theme", mode);
+    themeBtns.forEach(b => {
+      const on = b.dataset.mode === mode;
+      b.classList.toggle("active", on);
+      b.setAttribute("aria-pressed", on);
+    });
+    if (save) store.set(mode);
+  }
+  const saved = store.get();
+  applyTheme(MODES.includes(saved) ? saved : "auto", false);
+  themeBtns.forEach(b => b.addEventListener("click", () => applyTheme(b.dataset.mode, true)));
+
+  /* ───────── Datos ───────── */
+  const T = ["15:45", "16:40", "17:35", "18:30", "18:50", "19:45", "20:40", "21:35"];
+  const BREAK = 3;
+
+  const SUBJECTS = {
+    proye:  { name: "Realización de proyectos",      meta: "PTS 06 · INF-1",              legend: "Proyectos" },
+    color:  { name: "Color, iluminación y acabados", meta: "PTS 01 / PTS 04 · INF-1",     legend: "Color e iluminación" },
+    dibujo: { name: "Diseño, dibujo y modelado",     meta: "PS SO 01 / PS SO 03 · INF-1", legend: "Diseño y dibujo" },
+    anim:   { name: "Animación de elementos",        meta: "PS SO 01 / PS SO 02 · INF-1", legend: "Animación 2D/3D" },
+    fol:    { name: "Itinerario personal",           meta: "FOL 04 · POLI 2",             legend: "Itinerario / FOL" },
+    inter:  { name: "Proyecto intermodular",         meta: "PS SO 03 · INF-1",            legend: "Intermodular" },
+    ingles: { name: "Inglés profesional",            meta: "ANG 02 · ANG 1",              legend: "Inglés" }
+  };
+
+  const SCHEDULE = {
+    1: [["proye", 0, 1], ["color", 1, 3], ["dibujo", 4, 7]],
+    2: [["fol", 0, 1], ["inter", 1, 2], ["proye", 2, 3], ["proye", 4, 6], ["ingles", 6, 7]],
+    3: [["color", 0, 3], ["fol", 4, 5], ["proye", 5, 7]],
+    4: [["anim", 0, 3], ["anim", 4, 5], ["ingles", 5, 6], ["fol", 6, 7, "FOL 04 · POLI 1"]],
+    5: [["anim", 0, 3], ["anim", 4, 5], ["dibujo", 5, 7]]
+  };
+
+  const DAYS = [1, 2, 3, 4, 5];
+  const DAY_NAMES = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+  const colorOf = mod => `var(--mod-${mod})`;
+  const toMin = t => { const [h, m] = t.split(":").map(Number); return h * 60 + m; };
+
+  const events = {};
+  DAYS.forEach(d => {
+    const list = SCHEDULE[d].map(([mod, from, to, meta]) => ({
+      mod, from, to, start: T[from], end: T[to],
+      name: SUBJECTS[mod].name, meta: meta || SUBJECTS[mod].meta
+    }));
+    list.push({ mod: "recreo", from: BREAK, to: BREAK + 1, start: T[BREAK], end: T[BREAK + 1], name: "Recreo", meta: "Descanso" });
+    events[d] = list.sort((a, b) => a.from - b.from);
+  });
+
+  /* ───────── Render ───────── */
+  function render() {
+    const tbody = document.getElementById("tbody");
+    tbody.innerHTML = "";
+    
+    for (let p = 0; p < T.length - 1; p++) {
+      const tr = document.createElement("tr");
+      
+      const time = document.createElement("td");
+      time.className = "time-col";
+      time.textContent = `${T[p]}–${T[p + 1]}`;
+      tr.appendChild(time);
+
+      if (p === BREAK) {
+        const td = document.createElement("td");
+        td.className = "break";
+        td.colSpan = DAYS.length;
+        td.textContent = "Recreo";
+        tr.appendChild(td);
+      } else {
+        DAYS.forEach(d => {
+          const ev = events[d].find(e => e.from === p);
+          if (ev) {
+            const td = document.createElement("td");
+            td.className = "slot";
+            td.rowSpan = ev.to - ev.from; 
+            td.style.setProperty("--c", colorOf(ev.mod));
+            
+            const title = document.createElement("span");
+            title.className = "slot-title";
+            title.textContent = ev.name;
+            
+            const meta = document.createElement("span");
+            meta.className = "slot-meta";
+            meta.textContent = ev.meta;
+            
+            td.append(title, meta);
+            tr.appendChild(td);
+          } else if (!events[d].some(e => e.from < p && p < e.to)) {
+            const emptyTd = document.createElement("td");
+            emptyTd.className = "empty-slot";
+            tr.appendChild(emptyTd);
+          }
+        });
+      }
+      tbody.appendChild(tr);
+    }
+
+    document.getElementById("legend").innerHTML = Object.entries(SUBJECTS)
+      .map(([mod, s]) => `<div class="legend-item"><span class="legend-dot" style="background:${colorOf(mod)}"></span>${s.legend}</div>`)
+      .join("");
+  }
+
+  /* ───────── Rastreador del panel superior ───────── */
+  const $ = id => document.getElementById(id);
+  const fmt = m => {
+    const h = Math.floor(m / 60), r = m % 60;
+    return h ? (r ? `${h} h ${r} min` : `${h} h`) : `${m} min`;
+  };
+  const setCard = (card, mod) => card.style.setProperty("--c", mod ? colorOf(mod) : "var(--line)");
+
+  function nextClass(day) {
+    for (let k = 1; k <= 7; k++) {
+      const d = (day + k) % 7;
+      if (events[d] && events[d].length) {
+          return { ev: events[d][0], when: k === 1 ? "Mañana" : DAY_NAMES[d] };
+      }
+    }
+    return null;
+  }
+
+  function tick() {
+    const now = new Date();
+    const day = now.getDay();
+    const mins = now.getHours() * 60 + now.getMinutes();
+
+    $("today-date").textContent = now.toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" });
+
+    const list = events[day] || [];
+    const cur = list.find(e => mins >= toMin(e.start) && mins < toMin(e.end));
+    const upcoming = list.find(e => toMin(e.start) > mins);
+
+    // Estado "Ahora"
+    let progress = 0;
+    if (cur) {
+      const s = toMin(cur.start), e = toMin(cur.end);
+      $("now-title").textContent = cur.name;
+      $("now-meta").textContent = cur.meta;
+      $("now-timer").textContent = `Quedan ${fmt(e - mins)}`;
+      progress = (mins - s) / (e - s) * 100;
+      setCard($("card-now"), cur.mod);
+    } else {
+      setCard($("card-now"), null);
+      $("now-timer").textContent = "";
+      if (!list.length) {
+        $("now-title").textContent = "Hoy no hay clase";
+        $("now-meta").textContent = (day === 0 || day === 6) ? "Fin de semana" : "Día libre";
+      } else if (mins < toMin(list[0].start)) {
+        $("now-title").textContent = "Todavía no ha empezado";
+        $("now-meta").textContent = `Empieza hoy a las ${list[0].start}`;
+      } else {
+        $("now-title").textContent = "Jornada terminada";
+        $("now-meta").textContent = "No quedan clases hoy";
+      }
+    }
+    $("now-progress").style.width = `${Math.min(100, Math.max(0, progress))}%`;
+
+    // Estado "Siguiente"
+    const nxt = upcoming ? { ev: upcoming, when: "Hoy" } : nextClass(day);
+    if (nxt) {
+      $("next-title").textContent = nxt.ev.name;
+      $("next-meta").textContent = `${nxt.when} a las ${nxt.ev.start} · ${nxt.ev.meta}`;
+      setCard($("card-next"), nxt.ev.mod);
+    }
+  }
+
+  function loop() {
+    tick();
+    const n = new Date();
+    setTimeout(loop, (60 - n.getSeconds()) * 1000 - n.getMilliseconds() + 50);
+  }
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) tick(); });
+
+  render();
+  loop();
+</script>
+</body>
+</html>
