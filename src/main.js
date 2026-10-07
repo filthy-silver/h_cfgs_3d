@@ -185,17 +185,25 @@ async function loadAulesAssignments() {
   try {
     const response = await fetch('/api/aules');
     if (!response.ok) {
+      console.warn(`[Aules] /api/aules respondió con status ${response.status} (${response.statusText}).`);
       hideAssignmentsPanel();
       return;
     }
     const data = await response.json();
+    console.info('[Aules] Respuesta recibida del servidor:', data);
+
     if (data && data.success && Array.isArray(data.assignments) && data.assignments.length > 0) {
       renderAssignments(data.assignments);
     } else {
+      if (data && !data.success) {
+        console.warn('[Aules] Aviso:', data.message || data.error);
+      } else {
+        console.info('[Aules] Conexión correcta pero no hay entregas con fecha futura en el calendario.');
+      }
       hideAssignmentsPanel();
     }
-  } catch {
-    // Si no hay conexión o el endpoint falla, ocultar panel silenciosamente
+  } catch (err) {
+    console.warn('[Aules] No se pudo conectar con /api/aules (posible entorno local sin Wrangler o sin conexión):', err);
     hideAssignmentsPanel();
   }
 }
