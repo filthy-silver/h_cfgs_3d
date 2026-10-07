@@ -255,7 +255,7 @@ export async function onRequest(context) {
   try {
     const response = await fetch(aulesUrl, {
       headers: {
-        'User-Agent': 'Cloudflare-Worker-Aules-Proxy/1.0',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
         'Accept': 'text/calendar, text/plain, */*'
       }
     });
