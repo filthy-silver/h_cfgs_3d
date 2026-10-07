@@ -1,0 +1,6 @@
+# Variables de entorno secretas para desarrollo local con Cloudflare Wrangler
+# Copia este archivo a '.dev.vars' y pega tu URL privada de Aules:
+AULES_ICAL_URL="https://aules.edu.gva.es/fp/calendar/export_execute.php?userid=TU_ID&authtoken=TU_TOKEN&preset_what=all&preset_time=recentupcoming"
+
+# También puedes usar el modo demo para pruebas locales poniendo:
+# AULES_ICAL_URL="demo"

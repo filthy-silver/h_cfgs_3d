@@ -183,7 +183,9 @@ function setupViewportObserver() {
  */
 async function loadAulesAssignments() {
   try {
-    const response = await fetch('/api/aules');
+    const isDemo = window.location.search.includes('demo=1');
+    const apiUrl = isDemo ? '/api/aules?demo=1' : '/api/aules';
+    const response = await fetch(apiUrl);
     if (!response.ok) {
       console.warn(`[Aules] /api/aules respondió con status ${response.status} (${response.statusText}).`);
       hideAssignmentsPanel();

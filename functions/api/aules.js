@@ -172,6 +172,67 @@ export async function onRequest(context) {
   }
 
   const aulesUrl = context.env?.AULES_ICAL_URL;
+  const requestUrl = new URL(context.request.url);
+  const isDemo = requestUrl.searchParams.get('demo') === '1' || aulesUrl === 'demo' || aulesUrl === 'mock';
+
+  // Modo demostración / pruebas locales
+  if (isDemo) {
+    const now = new Date();
+    const mockAssignments = [
+      {
+        id: "demo-1",
+        title: "Actividad 3: Rigging bípedo y cinemática inversa",
+        description: "Módulo de Animación de elementos 2D y 3D. Subir archivo .blend o .fbx con pesos de piel ajustados.",
+        category: "Animación de elementos 2D y 3D",
+        url: "https://aules.edu.gva.es/fp/",
+        dueIso: new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000).toISOString(),
+        dueTimestamp: now.getTime() + 2 * 24 * 60 * 60 * 1000
+      },
+      {
+        id: "demo-2",
+        title: "Memoria del Proyecto Intermodular (Fase 1)",
+        description: "Subir documento en formato PDF con la biblia de arte y el diseño técnico preliminar.",
+        category: "Proyecto intermodular",
+        url: "https://aules.edu.gva.es/fp/",
+        dueIso: new Date(now.getTime() + 4 * 24 * 60 * 60 * 1000).toISOString(),
+        dueTimestamp: now.getTime() + 4 * 24 * 60 * 60 * 1000
+      },
+      {
+        id: "demo-3",
+        title: "Iluminación de tres puntos y Render passes",
+        description: "Color, iluminación y acabados. Entrega de pases de difuso, especular y oclusión ambiental.",
+        category: "Color, iluminación y acabados",
+        url: "https://aules.edu.gva.es/fp/",
+        dueIso: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+        dueTimestamp: now.getTime() + 7 * 24 * 60 * 60 * 1000
+      },
+      {
+        id: "demo-4",
+        title: "Modelado Low-Poly y mapa UV del personaje",
+        description: "Diseño, dibujo y modelado. Malla de menos de 10k polígonos con texturas aplicadas.",
+        category: "Diseño, dibujo y modelado",
+        url: "https://aules.edu.gva.es/fp/",
+        dueIso: new Date(now.getTime() + 11 * 24 * 60 * 60 * 1000).toISOString(),
+        dueTimestamp: now.getTime() + 11 * 24 * 60 * 60 * 1000
+      }
+    ];
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        count: mockAssignments.length,
+        assignments: mockAssignments,
+        isDemo: true
+      }),
+      {
+        status: 200,
+        headers: {
+          ...corsHeaders,
+          'Cache-Control': 'no-store'
+        }
+      }
+    );
+  }
 
   // Si no está configurado el secreto en Cloudflare
   if (!aulesUrl) {
@@ -179,7 +240,7 @@ export async function onRequest(context) {
       JSON.stringify({
         success: false,
         assignments: [],
-        message: 'AULES_ICAL_URL no configurada en las variables de entorno de Cloudflare.'
+        message: 'AULES_ICAL_URL no configurada en las variables de entorno de Cloudflare. Añade el secreto en el panel de Cloudflare o en un archivo .dev.vars local.'
       }),
       {
         status: 200,
