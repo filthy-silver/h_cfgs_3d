@@ -660,6 +660,177 @@ table.has-focus td.break {
   filter: brightness(1.1);
 }
 
+/* ───────── Panel de Próximas Entregas (Aules) ───────── */
+.assignments-panel {
+  display: none; /* Oculto por defecto hasta que lleguen datos de /api/aules */
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 1.25rem 1.4rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.assignments-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-bottom: 1.1rem;
+}
+
+.assignments-title-group {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.assignments-icon-box {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.assignments-icon-box svg {
+  width: 20px;
+  height: 20px;
+  fill: currentColor;
+}
+
+.assignments-heading {
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.assignments-subheading {
+  font-size: 0.76rem;
+  color: var(--muted);
+}
+
+.assignments-counter {
+  font-size: 0.76rem;
+  font-weight: 600;
+  background: var(--surface-2);
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 4px 10px;
+}
+
+.assignments-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  gap: 0.85rem;
+}
+
+.assignment-card {
+  --c: var(--muted);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--c);
+  border-radius: 8px;
+  padding: 0.9rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.assignment-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+
+.assignment-card.is-urgent {
+  background: color-mix(in srgb, #ef4444 6%, var(--surface-2));
+  border-color: color-mix(in srgb, #ef4444 30%, var(--line));
+}
+
+.assignment-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.assignment-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 4px;
+  letter-spacing: 0.02em;
+}
+
+.assignment-countdown {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.assignment-countdown.urgent {
+  color: #ef4444;
+  font-weight: 700;
+}
+
+.assignment-title {
+  font-size: 0.92rem;
+  font-weight: 650;
+  line-height: 1.35;
+  color: var(--text);
+  word-break: break-word;
+}
+
+.assignment-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.2rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.assignment-due {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.assignment-due svg {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+}
+
+.assignment-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+  transition: opacity 0.15s ease;
+}
+
+.assignment-link:hover {
+  text-decoration: underline;
+  opacity: 0.85;
+}
+
+.assignment-link svg {
+  width: 12px;
+  height: 12px;
+  fill: currentColor;
+}
+
 /* ───────── Breakpoints Responsivos ───────── */
 @media (max-width: 767px) {
   .table-wrapper, .legend-bar {
@@ -674,7 +845,8 @@ table.has-focus td.break {
   .progress > i,
   .timeline-card,
   .modal-dialog,
-  .modal-backdrop {
+  .modal-backdrop,
+  .assignment-card {
     transition: none !important;
   }
 }

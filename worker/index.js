@@ -4,10 +4,16 @@
  */
 
 import { generateIcsFeed } from '../functions/api/calendar.ics.js';
+import { onRequest as handleAulesRequest } from '../functions/api/aules.js';
 
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+
+    // Endpoint de entregas de Aules (Moodle)
+    if (url.pathname === '/api/aules') {
+      return handleAulesRequest({ request, env, ctx });
+    }
 
     // Endpoint de suscripción a calendario
     if (url.pathname === '/api/calendar.ics' || url.pathname === '/api/calendar') {

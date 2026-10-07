@@ -25,6 +25,7 @@ import {
   setMobileDay
 } from './ui/timeline-view.js';
 import { initCalendarModal } from './ui/calendar-modal.js';
+import { renderAssignments, hideAssignmentsPanel } from './ui/assignments-view.js';
 
 // Modelo de datos normalizado
 const eventsByDay = buildNormalizedEvents();
@@ -178,6 +179,28 @@ function setupViewportObserver() {
 }
 
 /**
+ * Carga asíncrona no bloqueante de las próximas entregas desde el Edge Proxy de Aules.
+ */
+async function loadAulesAssignments() {
+  try {
+    const response = await fetch('/api/aules');
+    if (!response.ok) {
+      hideAssignmentsPanel();
+      return;
+    }
+    const data = await response.json();
+    if (data && data.success && Array.isArray(data.assignments) && data.assignments.length > 0) {
+      renderAssignments(data.assignments);
+    } else {
+      hideAssignmentsPanel();
+    }
+  } catch {
+    // Si no hay conexión o el endpoint falla, ocultar panel silenciosamente
+    hideAssignmentsPanel();
+  }
+}
+
+/**
  * Registro tolerante y seguro del Service Worker.
  */
 function setupServiceWorker() {
@@ -223,13 +246,16 @@ document.addEventListener("DOMContentLoaded", () => {
   // 6. Iniciar bucle de reloj reactivo
   runLoop();
 
-  // 7. Re-sincronizar cuando la pestaña vuelve al primer plano
+  // 7. Carga en segundo plano de entregas de Aules (no bloqueante)
+  loadAulesAssignments();
+
+  // 8. Re-sincronizar cuando la pestaña vuelve al primer plano
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) {
       tick();
     }
   });
 
-  // 8. Service Worker
+  // 9. Service Worker
   setupServiceWorker();
 });
