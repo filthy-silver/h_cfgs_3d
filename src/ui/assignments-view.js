@@ -6,49 +6,66 @@
 import { SUBJECTS } from '../data/schedule.data.js';
 
 /**
- * Tabla de equivalencias para mapear títulos, descripciones o categorías de Moodle a nuestras claves internas.
+ * Tabla de equivalencias para mapear cursos y entregas de Aules (soporte bilingüe valenciano/castellano).
  */
 export const AULES_SUBJECT_PATTERNS = [
   {
-    mod: "anim",
-    keywords: ["animación de elementos 2d y 3d", "animación", "animacion", "elementos 2d", "animación 3d"]
-  },
-  {
     mod: "proye",
-    keywords: ["realización de proyectos", "realizacion de proyectos", "proyectos", "pts 06"]
-  },
-  {
-    mod: "color",
-    keywords: ["color, iluminación y acabados", "color e iluminación", "iluminación", "iluminacion", "color", "acabados"]
+    keywords: ["realització de projectes", "realitzacio de projectes", "projectes", "realización de proyectos", "realizacion de proyectos", "proyectos", "pts 06"]
   },
   {
     mod: "dibujo",
-    keywords: ["diseño, dibujo y modelado", "diseño y dibujo", "dibujo", "diseño", "diseno", "modelado"]
+    keywords: ["disseny, dibuix i modelatge", "dibuix", "disseny", "modelatge", "diseño, dibujo y modelado", "diseño y dibujo", "dibujo", "modelado"]
+  },
+  {
+    mod: "anim",
+    keywords: ["animació d'elements", "animació", "animacion", "animación de elementos", "elementos 2d", "animación 3d"]
+  },
+  {
+    mod: "color",
+    keywords: ["color, il·luminació i acabats", "color, il-luminacio", "il·luminació", "iluminació", "color, iluminación y acabados", "color e iluminación", "iluminación", "color", "acabados"]
   },
   {
     mod: "fol",
-    keywords: ["itinerario personal", "itinerario para la empleabilidad", "fol", "empleabilidad"]
+    keywords: ["itinerari personal", "itinerari per a l'ocupabilitat", "itinerari", "ocupabilitat", "itinerario personal", "itinerario para la empleabilidad", "fol", "empleabilidad"]
   },
   {
     mod: "inter",
-    keywords: ["proyecto intermodular", "intermodular"]
+    keywords: ["projecte intermodular", "proyecto intermodular", "intermodular"]
   },
   {
     mod: "ingles",
-    keywords: ["inglés profesional", "ingles profesional", "inglés", "ingles", "english"]
+    keywords: ["anglés professional", "anglés", "angles", "inglés profesional", "ingles profesional", "inglés", "ingles", "english", "ang 02"]
   }
 ];
 
 /**
- * Determina qué módulo corresponde a una entrega analizando su categoría, título y descripción.
+ * Determina qué módulo corresponde a una entrega analizando prioritariamente su categoría (nombre del curso en Aules)
+ * y posteriormente el título o descripción.
  * @param {Object} assignment
  * @returns {{ mod: string|null, colorVar: string, name: string }}
  */
 export function matchSubject(assignment) {
-  const searchText = `${assignment.category || ''} ${assignment.title || ''} ${assignment.description || ''}`.toLowerCase();
+  const categoryText = (assignment.category || '').toLowerCase();
 
+  // 1. Prioridad: Coincidencia con la categoría del curso en Aules
   for (const item of AULES_SUBJECT_PATTERNS) {
-    if (item.keywords.some(kw => searchText.includes(kw.toLowerCase()))) {
+    if (item.keywords.some(kw => categoryText.includes(kw.toLowerCase()))) {
+      const subject = SUBJECTS[item.mod];
+      if (subject) {
+        return {
+          mod: item.mod,
+          colorVar: subject.colorVar,
+          name: subject.legend || subject.name
+        };
+      }
+    }
+  }
+
+  // 2. Coincidencia secundaria con el título y descripción
+  const fullText = `${assignment.title || ''} ${assignment.description || ''}`.toLowerCase();
+  for (const item of AULES_SUBJECT_PATTERNS) {
+    if (item.keywords.some(kw => fullText.includes(kw.toLowerCase()))) {
       const subject = SUBJECTS[item.mod];
       if (subject) {
         return {
@@ -133,6 +150,7 @@ export function renderAssignments(assignments) {
   const itemsHtml = assignments.map(task => {
     const subject = matchSubject(task);
     const { formattedDate, relativeBadge, isUrgent } = formatDueDate(task.dueIso || task.dueTimestamp);
+    const cleanTitle = (task.title || '').replace(/^(Venciment de |Vencimiento de )/i, '').trim();
 
     const linkHtml = task.url
       ? `<a href="${task.url}" target="_blank" rel="noopener noreferrer" class="assignment-link" aria-label="Abrir entrega en Aules">
@@ -151,7 +169,7 @@ export function renderAssignments(assignments) {
             ${relativeBadge}
           </span>
         </div>
-        <h3 class="assignment-title">${task.title}</h3>
+        <h3 class="assignment-title">${cleanTitle}</h3>
         <div class="assignment-footer">
           <div class="assignment-due">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20a8 8 0 100-16 8 8 0 000 16zm0-18a10 10 0 110 20 10 10 0 010-20zm.5 5v5.25l4.5 2.67-.75 1.23L11 13V7h1.5z"/></svg>

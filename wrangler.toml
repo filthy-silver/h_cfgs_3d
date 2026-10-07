@@ -1,4 +1,4 @@
-name = "horario-cfgs-3d"
+name = "h-cfgs-3d"
 main = "worker/index.js"
 compatibility_date = "2024-04-01"
 
