@@ -1,0 +1,15 @@
+# Dependencias y entornos
+node_modules/
+.env
+.env.local
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Logs y temporales
+*.log
+.wrangler/
+dist/
+build/

@@ -1,0 +1,21 @@
+# Reglas de caché y seguridad para Cloudflare Pages / Workers
+
+/sw.js
+  Cache-Control: public, max-age=0, must-revalidate
+
+/manifest.json
+  Cache-Control: public, max-age=3600
+
+/css/*
+  Cache-Control: public, max-age=86400, stale-while-revalidate=604800
+
+/src/*
+  Cache-Control: public, max-age=86400, stale-while-revalidate=604800
+
+/icon-*.png
+  Cache-Control: public, max-age=2592000, immutable
+
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin

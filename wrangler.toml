@@ -1,0 +1,14 @@
+name = "horario-cfgs-3d"
+compatibility_date = "2024-04-01"
+
+# Despliegue con soporte de Workers Static Assets / Pages
+[site]
+bucket = "./"
+
+[observability]
+enabled = true
+
+# Variables de entorno públicas
+[vars]
+ENVIRONMENT = "production"
+TZ = "Europe/Madrid"
