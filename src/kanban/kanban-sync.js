@@ -122,6 +122,7 @@ function closeSyncModal() {
   modal.classList.remove('is-open');
   modal.setAttribute('aria-hidden', 'true');
   stopSharingTimers();
+  resetShareView();
 }
 
 /**
@@ -140,6 +141,7 @@ function stopSharingTimers() {
  */
 async function requestNewPin() {
   stopSharingTimers();
+  resetShareView();
 
   const codeBox = document.getElementById('sync-code-display');
   const timerText = document.getElementById('sync-timer-text');
@@ -252,60 +254,24 @@ function startStatusPolling(pin) {
  * Muestra animación de confirmación y CIERRA AUTOMÁTICAMENTE la ventana tras 1.5s.
  */
 function showClaimSuccessAnimation() {
-  const shareView = document.getElementById('view-sync-share');
-  if (!shareView) return;
-
-  shareView.innerHTML = `
-    <div class="sync-success-screen" role="alert" aria-live="polite">
-      <div class="sync-success-icon" aria-hidden="true">✓</div>
-      <h3 class="sync-success-title">¡Dispositivo enlazado con éxito!</h3>
-      <p class="sync-success-desc">Tus tareas, notas y columnas se han transferido correctamente.</p>
-      <span class="sync-closing-hint">Cerrando ventana automáticamente…</span>
-    </div>
-  `;
+  const contentEl = document.getElementById('sync-share-content');
+  const successEl = document.getElementById('sync-share-success');
+  if (contentEl) contentEl.classList.add('is-hidden');
+  if (successEl) successEl.classList.remove('is-hidden');
 
   setTimeout(() => {
     closeSyncModal();
-    // Restaurar contenido original del tab share al cerrarse
-    resetShareViewHtml();
   }, 1600);
 }
 
 /**
- * Restaura el HTML del tab share después del cierre automático.
+ * Restaura la vista normal de compartir código.
  */
-function resetShareViewHtml() {
-  const shareView = document.getElementById('view-sync-share');
-  if (!shareView) return;
-
-  shareView.innerHTML = `
-    <p class="sync-step-instruction">
-      Escribe este código de un solo uso en tu otro dispositivo (móvil, portátil o torre):
-    </p>
-
-    <div class="sync-pin-container">
-      <div class="sync-code-box" id="sync-code-display">··· ···</div>
-      
-      <div class="sync-countdown-bar" role="progressbar" aria-label="Tiempo restante de validez del código">
-        <div class="sync-countdown-fill" id="sync-timer-progress"></div>
-      </div>
-      
-      <div class="sync-timer-meta">
-        <span id="sync-timer-text">Caduca en 05:00</span>
-      </div>
-    </div>
-
-    <div class="sync-status-indicator" id="sync-status-msg" aria-live="polite">
-      <span class="spinner-dot"></span> Esperando conexión…
-    </div>
-
-    <div class="sync-expired-alert is-hidden" id="sync-expired-msg">
-      <span>El código ha caducado por seguridad.</span>
-      <button type="button" class="btn-regen-pin" id="btn-regen-pin">🔄 Generar nuevo código</button>
-    </div>
-  `;
-
-  document.getElementById('btn-regen-pin')?.addEventListener('click', requestNewPin);
+function resetShareView() {
+  const contentEl = document.getElementById('sync-share-content');
+  const successEl = document.getElementById('sync-share-success');
+  if (contentEl) contentEl.classList.remove('is-hidden');
+  if (successEl) successEl.classList.add('is-hidden');
 }
 
 /**

@@ -104,8 +104,16 @@ export function initKanbanNotes() {
       }, 300));
     });
 
-    // Clics para borrar o cambiar color
+    // Clics para borrar, cambiar color o crear primera nota
     gridEl.addEventListener('click', (e) => {
+      // Botón de estado vacío
+      const emptyBtn = e.target.closest('#btn-empty-note');
+      if (emptyBtn) {
+        addStickyNote('Ej: Recordar traer el disco duro para la entrega de texturas.', 'yellow');
+        renderNotesGrid();
+        return;
+      }
+
       // Eliminar nota
       const deleteBtn = e.target.closest('.btn-delete-note');
       if (deleteBtn) {
@@ -170,14 +178,9 @@ export function renderNotesGrid() {
     gridEl.innerHTML = `
       <div class="notes-empty-state">
         <p>No tienes notas ni recordatorios pendientes.</p>
-        <button type="button" class="btn-empty-add-note" id="btn-empty-note">+ Crear mi primera nota</button>
+        <button type="button" class="btn-empty-add-note" id="btn-empty-note">Crear mi primera nota</button>
       </div>
     `;
-
-    document.getElementById('btn-empty-note')?.addEventListener('click', () => {
-      addStickyNote('Ej: Recordar traer el disco duro para la entrega de texturas.', 'yellow');
-      renderNotesGrid();
-    });
     return;
   }
 

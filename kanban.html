@@ -24,7 +24,7 @@
         <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
           <path fill="currentColor" d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
         </svg>
-        <span>← Volver al Horario</span>
+        <span>Volver al Horario</span>
       </a>
 
       <div class="title-group">
@@ -34,8 +34,8 @@
     </div>
 
     <div class="topbar-actions">
-      <!-- Botón para sincronizar entre dispositivos (PC ↔ Móvil) -->
-      <button type="button" class="btn-sync-action" id="btn-open-sync" title="Vincular con tu móvil u otro ordenador" aria-haspopup="dialog">
+      <!-- Botón para sincronizar entre dispositivos -->
+      <button type="button" class="btn-sync-action" id="btn-open-sync" title="Vincular con tu móvil u otro dispositivo" aria-haspopup="dialog">
         <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
           <path fill="currentColor" d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z"/>
         </svg>
@@ -47,7 +47,7 @@
         <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
           <path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
         </svg>
-        <span>+ Tarea personal</span>
+        <span>Tarea personal</span>
       </button>
 
       <!-- Selector de Modo de Color (Sincronizado con index.html) -->
@@ -77,7 +77,7 @@
     <div class="board-legend-hints" aria-hidden="true">
       <div class="legend-hint-item">
         <span class="legend-hint-box exam"></span>
-        <span>Exámenes (borde 7px)</span>
+        <span>Exámenes oficiales</span>
       </div>
       <div class="legend-hint-item">
         <span class="legend-hint-box aules"></span>
@@ -144,7 +144,7 @@
           <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
             <path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
           </svg>
-          <span>+ Nueva nota</span>
+          <span>Nueva nota</span>
         </button>
 
         <button
@@ -224,7 +224,7 @@
   </div>
 </div>
 
-<!-- Modal: Sincronización en la Nube (Móvil ↔ Torre con Pairing Handshake) -->
+<!-- Modal: Sincronización en la Nube (Vincular dispositivos con Pairing Handshake) -->
 <div class="modal-backdrop" id="sync-modal" role="dialog" aria-modal="true" aria-labelledby="sync-modal-heading" aria-hidden="true">
   <div class="modal-dialog sync-modal-dialog">
     <div class="modal-header">
@@ -232,7 +232,7 @@
         <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
           <path fill="currentColor" d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM10 17l-3.5-3.5 1.41-1.41L10 14.17l5.59-5.59L17 10l-7 7z"/>
         </svg>
-        <h2 class="modal-title" id="sync-modal-heading">Vincular Móvil / Torre</h2>
+        <h2 class="modal-title" id="sync-modal-heading">Vincular dispositivos</h2>
       </div>
       <button type="button" class="modal-close" data-close-sync-modal aria-label="Cerrar diálogo">&times;</button>
     </div>
@@ -249,29 +249,39 @@
 
     <!-- Vista 1: Compartir con otro equipo (Genera PIN con cuenta atrás y detección de canje) -->
     <div class="modal-body sync-modal-body" id="view-sync-share">
-      <p class="sync-step-instruction">
-        Escribe este código de un solo uso en tu otro dispositivo (móvil, portátil o torre):
-      </p>
+      <div id="sync-share-content">
+        <p class="sync-step-instruction">
+          Escribe este código de un solo uso en tu otro dispositivo para transferir tu tablero:
+        </p>
 
-      <div class="sync-pin-container">
-        <div class="sync-code-box" id="sync-code-display">··· ···</div>
-        
-        <div class="sync-countdown-bar" role="progressbar" aria-label="Tiempo restante de validez del código">
-          <div class="sync-countdown-fill" id="sync-timer-progress"></div>
+        <div class="sync-pin-container">
+          <div class="sync-code-box" id="sync-code-display">··· ···</div>
+          
+          <div class="sync-countdown-bar" role="progressbar" aria-label="Tiempo restante de validez del código">
+            <div class="sync-countdown-fill" id="sync-timer-progress"></div>
+          </div>
+          
+          <div class="sync-timer-meta">
+            <span id="sync-timer-text">Caduca en 05:00</span>
+          </div>
         </div>
-        
-        <div class="sync-timer-meta">
-          <span id="sync-timer-text">Caduca en 05:00</span>
+
+        <div class="sync-status-indicator" id="sync-status-msg" aria-live="polite">
+          <span class="spinner-dot"></span> Esperando conexión…
+        </div>
+
+        <div class="sync-expired-alert is-hidden" id="sync-expired-msg">
+          <span>El código ha caducado por seguridad.</span>
+          <button type="button" class="btn-regen-pin" id="btn-regen-pin">🔄 Generar nuevo código</button>
         </div>
       </div>
 
-      <div class="sync-status-indicator" id="sync-status-msg" aria-live="polite">
-        <span class="spinner-dot"></span> Esperando conexión…
-      </div>
-
-      <div class="sync-expired-alert is-hidden" id="sync-expired-msg">
-        <span>El código ha caducado por seguridad.</span>
-        <button type="button" class="btn-regen-pin" id="btn-regen-pin">🔄 Generar nuevo código</button>
+      <!-- Pantalla de confirmación y cierre automático -->
+      <div class="sync-success-screen is-hidden" id="sync-share-success" role="alert" aria-live="polite">
+        <div class="sync-success-icon" aria-hidden="true">✓</div>
+        <h3 class="sync-success-title">¡Dispositivo enlazado con éxito!</h3>
+        <p class="sync-success-desc">Tus tareas, notas y columnas se han transferido correctamente.</p>
+        <span class="sync-closing-hint">Cerrando ventana automáticamente…</span>
       </div>
     </div>
 

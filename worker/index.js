@@ -6,10 +6,16 @@
 import { generateIcsFeed } from '../functions/api/calendar.ics.js';
 import { onRequest as handleAulesRequest } from '../functions/api/aules.js';
 import { onRequest as handleEventsRequest } from '../functions/api/events.js';
+import { onRequest as handleSyncRequest } from '../functions/api/sync.js';
 
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+
+    // Endpoint de sincronización y emparejamiento (Pairing Handshake)
+    if (url.pathname === '/api/sync' || url.pathname.startsWith('/api/sync/')) {
+      return handleSyncRequest({ request, env, ctx });
+    }
 
     // Endpoint de gestión y consulta de exámenes
     if (url.pathname === '/api/events' || url.pathname.startsWith('/api/events/')) {
