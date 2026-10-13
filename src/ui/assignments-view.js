@@ -175,31 +175,29 @@ export function renderAssignments(items, options = {}) {
   adminActionCallbacks = { onEditExam, onDeleteExam, onAddExam };
 
   if (!items || !items.length) {
-    // Si no hay tareas pero está en modo admin, mostrar cabecera con botón de añadir
-    if (isAdmin) {
-      panelEl.innerHTML = `
-        <header class="assignments-header">
-          <div class="assignments-title-group">
-            <div class="assignments-icon-box" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><path d="M19 3h-4.18C14.4 1.84 13.3 1 12 1c-1.3 0-2.4.84-2.82 2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm2 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
-            </div>
-            <div>
-              <h2 class="assignments-heading">Próximas Entregas y Exámenes</h2>
-              <p class="assignments-subheading">Sin entregas ni exámenes pendientes</p>
-            </div>
+    // Si no hay tareas, mostrar cabecera limpia con enlace directo al tablero personal
+    panelEl.innerHTML = `
+      <header class="assignments-header">
+        <div class="assignments-title-group">
+          <div class="assignments-icon-box" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M19 3h-4.18C14.4 1.84 13.3 1 12 1c-1.3 0-2.4.84-2.82 2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm2 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
           </div>
-          <div class="assignments-header-actions">
-            <button type="button" class="btn-add-exam" id="btn-panel-add-exam">+ Añadir examen</button>
+          <div>
+            <h2 class="assignments-heading">Próximas Entregas y Exámenes</h2>
+            <p class="assignments-subheading">Sin entregas ni exámenes pendientes</p>
           </div>
-        </header>
-      `;
-      panelEl.style.display = "block";
-      setupPanelEventListeners(panelEl);
-      return;
-    }
-
-    panelEl.style.display = "none";
-    panelEl.innerHTML = "";
+        </div>
+        <div class="assignments-header-actions">
+          ${isAdmin ? `<button type="button" class="btn-add-exam" id="btn-panel-add-exam">+ Añadir examen</button>` : ''}
+          <a href="kanban.html" class="btn-panel-kanban" title="Abrir mi tablero Kanban personal">
+            <span>Mi Tablero</span>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13h11.86l-5.43 5.43 1.42 1.42L21.14 12l-8.29-7.85-1.42 1.42L16.86 11H5v2z"/></svg>
+          </a>
+        </div>
+      </header>
+    `;
+    panelEl.style.display = "block";
+    setupPanelEventListeners(panelEl);
     return;
   }
 
@@ -276,6 +274,10 @@ export function renderAssignments(items, options = {}) {
       </div>
       <div class="assignments-header-actions">
         ${isAdmin ? `<button type="button" class="btn-add-exam" id="btn-panel-add-exam">+ Añadir examen</button>` : ''}
+        <a href="kanban.html" class="btn-panel-kanban" title="Gestionar entregas en formato Tablero Kanban">
+          <span>Tablero</span>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13h11.86l-5.43 5.43 1.42 1.42L21.14 12l-8.29-7.85-1.42 1.42L16.86 11H5v2z"/></svg>
+        </a>
         <span class="assignments-counter">${sortedItems.length} pendiente${sortedItems.length > 1 ? 's' : ''}</span>
       </div>
     </header>

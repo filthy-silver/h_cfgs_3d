@@ -3,7 +3,7 @@
  * @description Service Worker con estrategia Cache-First para estáticos y Network-First para APIs.
  */
 
-const CACHE_NAME = 'horario-v5';
+const CACHE_NAME = 'horario-v6';
 
 const STATIC_ASSETS = [
   './',
@@ -12,6 +12,8 @@ const STATIC_ASSETS = [
   './icon-192.png',
   './icon-512.png',
   './css/styles.css',
+  './css/kanban.css',
+  './kanban.html',
   './src/main.js',
   './src/data/schedule.data.js',
   './src/domain/time-tracker.js',
@@ -20,7 +22,12 @@ const STATIC_ASSETS = [
   './src/ui/theme.js',
   './src/ui/calendar-modal.js',
   './src/ui/assignments-view.js',
-  './src/ui/admin-modal.js'
+  './src/ui/admin-modal.js',
+  './src/kanban/kanban.js',
+  './src/kanban/kanban-store.js',
+  './src/kanban/kanban-cards.js',
+  './src/kanban/kanban-dnd.js',
+  './src/kanban/kanban-notes.js'
 ];
 
 self.addEventListener('install', (event) => {
