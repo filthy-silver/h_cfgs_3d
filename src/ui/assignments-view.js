@@ -77,12 +77,37 @@ export function matchSubject(assignment) {
     }
   }
 
+  // 0. Si el elemento ya define su módulo directamente (exámenes manuales)
+  if (assignment.mod && SUBJECTS[assignment.mod]) {
+    const subject = SUBJECTS[assignment.mod];
+    return {
+      mod: assignment.mod,
+      colorVar: subject.colorVar,
+      name: subject.legend || subject.name
+    };
+  }
+
   // Asignatura no identificada / Entrega general
   return {
     mod: null,
     colorVar: "--muted",
     name: "General"
   };
+}
+
+/**
+ * Escapa caracteres HTML para prevenir inyecciones XSS en contenido introducido por usuarios.
+ * @param {string} str
+ * @returns {string}
+ */
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
 }
 
 /**
@@ -132,50 +157,107 @@ function formatDueDate(dueIsoOrTimestamp) {
   };
 }
 
+// Variables internas de estado y listeners para no duplicar eventos
+let adminActionCallbacks = null;
+let panelListenerAttached = false;
+
 /**
- * Renderiza el listado de entregas en `#assignments-panel`.
+ * Renderiza el listado unificado de entregas y exámenes en `#assignments-panel`.
  * Si el listado está vacío o no es válido, oculta el contenedor entero.
- * @param {Array<Object>} assignments
+ * @param {Array<Object>} items Lista combinada de entregas y exámenes
+ * @param {Object} [options={}] Opciones de renderizado (isAdmin, onEditExam, onDeleteExam, onAddExam)
  */
-export function renderAssignments(assignments) {
+export function renderAssignments(items, options = {}) {
   const panelEl = document.getElementById("assignments-panel");
   if (!panelEl) return;
 
-  if (!assignments || !assignments.length) {
+  const { isAdmin = false, onEditExam, onDeleteExam, onAddExam } = options;
+  adminActionCallbacks = { onEditExam, onDeleteExam, onAddExam };
+
+  if (!items || !items.length) {
+    // Si no hay tareas pero está en modo admin, mostrar cabecera con botón de añadir
+    if (isAdmin) {
+      panelEl.innerHTML = `
+        <header class="assignments-header">
+          <div class="assignments-title-group">
+            <div class="assignments-icon-box" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M19 3h-4.18C14.4 1.84 13.3 1 12 1c-1.3 0-2.4.84-2.82 2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm2 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
+            </div>
+            <div>
+              <h2 class="assignments-heading">Próximas Entregas y Exámenes</h2>
+              <p class="assignments-subheading">Sin entregas ni exámenes pendientes</p>
+            </div>
+          </div>
+          <div class="assignments-header-actions">
+            <button type="button" class="btn-add-exam" id="btn-panel-add-exam">+ Añadir examen</button>
+          </div>
+        </header>
+      `;
+      panelEl.style.display = "block";
+      setupPanelEventListeners(panelEl);
+      return;
+    }
+
     panelEl.style.display = "none";
     panelEl.innerHTML = "";
     return;
   }
 
-  const itemsHtml = assignments.map(task => {
-    const subject = matchSubject(task);
-    const { formattedDate, relativeBadge, isUrgent } = formatDueDate(task.dueIso || task.dueTimestamp);
-    const cleanTitle = (task.title || '').replace(/^(Venciment de |Vencimiento de )/i, '').trim();
+  // Ordenación cronológica rigurosa
+  const sortedItems = [...items].sort((a, b) => (a.dueTimestamp || 0) - (b.dueTimestamp || 0));
 
-    const linkHtml = task.url
-      ? `<a href="${task.url}" target="_blank" rel="noopener noreferrer" class="assignment-link" aria-label="Abrir entrega en Aules">
+  const itemsHtml = sortedItems.map(item => {
+    const isExam = item.type === 'exam';
+    const subject = matchSubject(item);
+    const { formattedDate, relativeBadge, isUrgent } = formatDueDate(item.dueIso || item.dueTimestamp);
+    const cleanTitle = (item.title || '').replace(/^(Venciment de |Vencimiento de )/i, '').trim();
+
+    const linkHtml = (!isExam && item.url)
+      ? `<a href="${item.url}" target="_blank" rel="noopener noreferrer" class="assignment-link" aria-label="Abrir entrega en Aules">
            <span>Ver en Aules</span>
            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3m-2 16H5V5h7V3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7h-2v7z"/></svg>
          </a>`
       : '';
 
+    const examBadgeHtml = isExam
+      ? `<span class="exam-tag">Examen</span>`
+      : '';
+
+    const notesHtml = (isExam && item.notes)
+      ? `<p class="assignment-notes">${escapeHtml(item.notes)}</p>`
+      : '';
+
+    const adminActionsHtml = (isExam && isAdmin)
+      ? `<div class="assignment-admin-actions">
+           <button type="button" class="btn-card-action edit" data-action="edit" data-id="${item.id}" aria-label="Editar examen">Editar</button>
+           <button type="button" class="btn-card-action delete" data-action="delete" data-id="${item.id}" aria-label="Eliminar examen">Eliminar</button>
+         </div>`
+      : '';
+
     return `
-      <article class="assignment-card ${isUrgent ? 'is-urgent' : ''}" style="--c: var(${subject.colorVar})">
+      <article class="assignment-card ${isExam ? 'is-exam' : ''} ${isUrgent ? 'is-urgent' : ''}" style="--c: var(${subject.colorVar})" data-id="${item.id || ''}" data-type="${isExam ? 'exam' : 'aules'}">
         <div class="assignment-header">
-          <span class="assignment-badge" style="background: color-mix(in srgb, var(${subject.colorVar}) 18%, transparent); color: var(${subject.colorVar});">
-            ${subject.name}
-          </span>
+          <div class="assignment-badges">
+            <span class="assignment-badge" style="background: color-mix(in srgb, var(${subject.colorVar}) 18%, transparent); color: var(${subject.colorVar});">
+              ${subject.name}
+            </span>
+            ${examBadgeHtml}
+          </div>
           <span class="assignment-countdown ${isUrgent ? 'urgent' : ''}">
             ${relativeBadge}
           </span>
         </div>
-        <h3 class="assignment-title">${cleanTitle}</h3>
+        <h3 class="assignment-title">${escapeHtml(cleanTitle)}</h3>
+        ${notesHtml}
         <div class="assignment-footer">
           <div class="assignment-due">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20a8 8 0 100-16 8 8 0 000 16zm0-18a10 10 0 110 20 10 10 0 010-20zm.5 5v5.25l4.5 2.67-.75 1.23L11 13V7h1.5z"/></svg>
             <span>${formattedDate}</span>
           </div>
-          ${linkHtml}
+          <div class="assignment-footer-right">
+            ${linkHtml}
+            ${adminActionsHtml}
+          </div>
         </div>
       </article>
     `;
@@ -188,11 +270,14 @@ export function renderAssignments(assignments) {
           <svg viewBox="0 0 24 24"><path d="M19 3h-4.18C14.4 1.84 13.3 1 12 1c-1.3 0-2.4.84-2.82 2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm2 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
         </div>
         <div>
-          <h2 class="assignments-heading">Próximas Entregas</h2>
-          <p class="assignments-subheading">Sincronizado con Aules (Moodle)</p>
+          <h2 class="assignments-heading">Próximas Entregas y Exámenes</h2>
+          <p class="assignments-subheading">Sincronizado con Aules y calendario de exámenes</p>
         </div>
       </div>
-      <span class="assignments-counter">${assignments.length} pendiente${assignments.length > 1 ? 's' : ''}</span>
+      <div class="assignments-header-actions">
+        ${isAdmin ? `<button type="button" class="btn-add-exam" id="btn-panel-add-exam">+ Añadir examen</button>` : ''}
+        <span class="assignments-counter">${sortedItems.length} pendiente${sortedItems.length > 1 ? 's' : ''}</span>
+      </div>
     </header>
     <div class="assignments-grid">
       ${itemsHtml}
@@ -200,6 +285,36 @@ export function renderAssignments(assignments) {
   `;
 
   panelEl.style.display = "block";
+  setupPanelEventListeners(panelEl);
+}
+
+/**
+ * Configura los delegados de eventos para botones de administración en el panel.
+ * @param {HTMLElement} panelEl
+ */
+function setupPanelEventListeners(panelEl) {
+  if (panelListenerAttached) return;
+  panelListenerAttached = true;
+
+  panelEl.addEventListener("click", (e) => {
+    const addBtn = e.target.closest("#btn-panel-add-exam");
+    if (addBtn && adminActionCallbacks?.onAddExam) {
+      adminActionCallbacks.onAddExam();
+      return;
+    }
+
+    const actionBtn = e.target.closest(".btn-card-action");
+    if (!actionBtn) return;
+
+    const action = actionBtn.getAttribute("data-action");
+    const id = actionBtn.getAttribute("data-id");
+
+    if (action === "edit" && adminActionCallbacks?.onEditExam) {
+      adminActionCallbacks.onEditExam(id);
+    } else if (action === "delete" && adminActionCallbacks?.onDeleteExam) {
+      adminActionCallbacks.onDeleteExam(id);
+    }
+  });
 }
 
 /**
@@ -211,3 +326,4 @@ export function hideAssignmentsPanel() {
     panelEl.style.display = "none";
   }
 }
+

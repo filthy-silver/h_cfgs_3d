@@ -26,9 +26,80 @@ import {
 } from './ui/timeline-view.js';
 import { initCalendarModal } from './ui/calendar-modal.js';
 import { renderAssignments, hideAssignmentsPanel } from './ui/assignments-view.js';
+import {
+  initAdminManager,
+  isUserAdmin,
+  setCachedExams,
+  openExamFormDialog,
+  deleteExam
+} from './ui/admin-modal.js';
 
 // Modelo de datos normalizado
 const eventsByDay = buildNormalizedEvents();
+
+// Estado en memoria de entregas y exámenes
+let cachedAulesAssignments = [];
+let cachedExams = [];
+
+/**
+ * Actualiza el panel inferior unificando entregas y exámenes y aplicando permisos de administración.
+ */
+function updateAssignmentsPanel() {
+  const combined = [...cachedAulesAssignments, ...cachedExams];
+  renderAssignments(combined, {
+    isAdmin: isUserAdmin(),
+    onEditExam: (id) => openExamFormDialog(id),
+    onDeleteExam: (id) => deleteExam(id),
+    onAddExam: () => openExamFormDialog(null)
+  });
+}
+
+/**
+ * Carga de exámenes desde /api/events.
+ */
+async function loadExams() {
+  try {
+    const response = await fetch('/api/events');
+    if (response.ok) {
+      const data = await response.json();
+      if (data && data.success && Array.isArray(data.exams)) {
+        cachedExams = data.exams;
+        setCachedExams(cachedExams);
+      }
+    }
+  } catch (err) {
+    console.warn('[Events] No se pudo cargar /api/events:', err);
+  }
+}
+
+/**
+ * Carga de entregas de Aules (Moodle) desde el Edge Proxy.
+ */
+async function loadAules() {
+  try {
+    const isDemo = window.location.search.includes('demo=1');
+    const apiUrl = isDemo ? '/api/aules?demo=1' : '/api/aules';
+    const response = await fetch(apiUrl);
+    if (!response.ok) {
+      console.warn(`[Aules] /api/aules respondió con status ${response.status} (${response.statusText}).`);
+      return;
+    }
+    const data = await response.json();
+    if (data && data.success && Array.isArray(data.assignments)) {
+      cachedAulesAssignments = data.assignments;
+    }
+  } catch (err) {
+    console.warn('[Aules] No se pudo conectar con /api/aules:', err);
+  }
+}
+
+/**
+ * Carga asíncrona concurrente de entregas de Aules y Exámenes sin bloquear la renderización principal.
+ */
+async function loadUnifiedAssignments() {
+  await Promise.allSettled([loadAules(), loadExams()]);
+  updateAssignmentsPanel();
+}
 
 // Selectores frecuentes
 const $ = id => document.getElementById(id);
@@ -179,38 +250,6 @@ function setupViewportObserver() {
 }
 
 /**
- * Carga asíncrona no bloqueante de las próximas entregas desde el Edge Proxy de Aules.
- */
-async function loadAulesAssignments() {
-  try {
-    const isDemo = window.location.search.includes('demo=1');
-    const apiUrl = isDemo ? '/api/aules?demo=1' : '/api/aules';
-    const response = await fetch(apiUrl);
-    if (!response.ok) {
-      console.warn(`[Aules] /api/aules respondió con status ${response.status} (${response.statusText}).`);
-      hideAssignmentsPanel();
-      return;
-    }
-    const data = await response.json();
-    console.info('[Aules] Respuesta recibida del servidor:', data);
-
-    if (data && data.success && Array.isArray(data.assignments) && data.assignments.length > 0) {
-      renderAssignments(data.assignments);
-    } else {
-      if (data && !data.success) {
-        console.warn('[Aules] Aviso:', data.message || data.error);
-      } else {
-        console.info('[Aules] Conexión correcta pero no hay entregas con fecha futura en el calendario.');
-      }
-      hideAssignmentsPanel();
-    }
-  } catch (err) {
-    console.warn('[Aules] No se pudo conectar con /api/aules (posible entorno local sin Wrangler o sin conexión):', err);
-    hideAssignmentsPanel();
-  }
-}
-
-/**
  * Registro tolerante y seguro del Service Worker.
  */
 function setupServiceWorker() {
@@ -250,22 +289,33 @@ document.addEventListener("DOMContentLoaded", () => {
   // 4. Diálogo de calendario (.ics)
   initCalendarModal();
 
-  // 5. Observador de accesibilidad de viewport
+  // 5. Gestor de Modo Administrador (PIN de Cloudflare y creación de exámenes)
+  initAdminManager({
+    onExamsChanged: async () => {
+      await loadExams();
+      updateAssignmentsPanel();
+    },
+    onAdminStateChanged: () => {
+      updateAssignmentsPanel();
+    }
+  });
+
+  // 6. Observador de accesibilidad de viewport
   setupViewportObserver();
 
-  // 6. Iniciar bucle de reloj reactivo
+  // 7. Iniciar bucle de reloj reactivo
   runLoop();
 
-  // 7. Carga en segundo plano de entregas de Aules (no bloqueante)
-  loadAulesAssignments();
+  // 8. Carga concurrente de entregas de Aules y Exámenes (no bloqueante)
+  loadUnifiedAssignments();
 
-  // 8. Re-sincronizar cuando la pestaña vuelve al primer plano
+  // 9. Re-sincronizar cuando la pestaña vuelve al primer plano
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) {
       tick();
     }
   });
 
-  // 9. Service Worker
+  // 10. Service Worker
   setupServiceWorker();
 });

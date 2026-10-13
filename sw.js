@@ -3,7 +3,7 @@
  * @description Service Worker con estrategia Cache-First para estáticos y Network-First para APIs.
  */
 
-const CACHE_NAME = 'horario-v4';
+const CACHE_NAME = 'horario-v5';
 
 const STATIC_ASSETS = [
   './',
@@ -19,7 +19,8 @@ const STATIC_ASSETS = [
   './src/ui/timeline-view.js',
   './src/ui/theme.js',
   './src/ui/calendar-modal.js',
-  './src/ui/assignments-view.js'
+  './src/ui/assignments-view.js',
+  './src/ui/admin-modal.js'
 ];
 
 self.addEventListener('install', (event) => {

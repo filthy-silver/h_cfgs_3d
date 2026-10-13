@@ -5,10 +5,16 @@
 
 import { generateIcsFeed } from '../functions/api/calendar.ics.js';
 import { onRequest as handleAulesRequest } from '../functions/api/aules.js';
+import { onRequest as handleEventsRequest } from '../functions/api/events.js';
 
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+
+    // Endpoint de gestión y consulta de exámenes
+    if (url.pathname === '/api/events' || url.pathname.startsWith('/api/events/')) {
+      return handleEventsRequest({ request, env, ctx });
+    }
 
     // Endpoint de entregas de Aules (Moodle)
     if (url.pathname === '/api/aules') {
