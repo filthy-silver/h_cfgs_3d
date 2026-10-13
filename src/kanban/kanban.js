@@ -16,7 +16,8 @@ import {
 } from './kanban-store.js';
 import { renderCardHtml } from './kanban-cards.js';
 import { initKanbanDnD } from './kanban-dnd.js';
-import { initKanbanNotes } from './kanban-notes.js';
+import { initKanbanNotes, renderNotesGrid } from './kanban-notes.js';
+import { initKanbanSync } from './kanban-sync.js';
 
 // Estado global de tarjetas en memoria
 let allItems = [];
@@ -416,17 +417,25 @@ document.addEventListener('DOMContentLoaded', () => {
   // 3. Inicializar panel colapsable de notas rápidas
   initKanbanNotes();
 
-  // 4. Configurar modal y delegación de acciones
+  // 4. Inicializar vinculación en la nube (Pairing Handshake Móvil ↔ Torre)
+  initKanbanSync({
+    onDataRestored: () => {
+      loadUnifiedData();
+      renderNotesGrid();
+    }
+  });
+
+  // 5. Configurar modal y delegación de acciones
   setupModalEvents();
   setupCardDelegation();
 
-  // 5. Barra de búsqueda rápida
+  // 6. Barra de búsqueda rápida
   const searchInput = document.getElementById('kanban-search-input');
   searchInput?.addEventListener('input', (e) => {
     currentSearchTerm = e.target.value.trim();
     renderBoard();
   });
 
-  // 6. Cargar datos unificados (Aules + Exámenes + Personales)
+  // 7. Cargar datos unificados (Aules + Exámenes + Personales)
   loadUnifiedData();
 });

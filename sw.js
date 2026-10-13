@@ -27,7 +27,8 @@ const STATIC_ASSETS = [
   './src/kanban/kanban-store.js',
   './src/kanban/kanban-cards.js',
   './src/kanban/kanban-dnd.js',
-  './src/kanban/kanban-notes.js'
+  './src/kanban/kanban-notes.js',
+  './src/kanban/kanban-sync.js'
 ];
 
 self.addEventListener('install', (event) => {

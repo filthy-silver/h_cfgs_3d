@@ -229,3 +229,40 @@ export function isNotesPanelCollapsed() {
 export function setNotesPanelCollapsed(isCollapsed) {
   safeStorage.set(STORAGE_KEYS.NOTES_COLLAPSED, Boolean(isCollapsed));
 }
+
+/* ─── 5. Exportación e Importación Completa (Sincronización en la Nube) ─── */
+
+/**
+ * Empaqueta todos los datos locales del Kanban para sincronizar.
+ * @returns {Object}
+ */
+export function exportAllKanbanData() {
+  return {
+    columns: getAllCardColumns(),
+    personalTasks: getPersonalTasks(),
+    stickyNotes: getStickyNotes(),
+    notesCollapsed: isNotesPanelCollapsed()
+  };
+}
+
+/**
+ * Importa y persiste el paquete de datos del Kanban recibido de la sincronización.
+ * @param {Object} data
+ */
+export function importAllKanbanData(data) {
+  if (!data || typeof data !== 'object') return;
+
+  if (data.columns && typeof data.columns === 'object') {
+    safeStorage.set(STORAGE_KEYS.COLUMNS, data.columns);
+  }
+  if (Array.isArray(data.personalTasks)) {
+    safeStorage.set(STORAGE_KEYS.PERSONAL_TASKS, data.personalTasks);
+  }
+  if (Array.isArray(data.stickyNotes)) {
+    safeStorage.set(STORAGE_KEYS.STICKY_NOTES, data.stickyNotes);
+  }
+  if (typeof data.notesCollapsed === 'boolean') {
+    safeStorage.set(STORAGE_KEYS.NOTES_COLLAPSED, data.notesCollapsed);
+  }
+}
+
