@@ -154,7 +154,14 @@ body {
   font-size: 0.85rem;
   font-weight: 600;
   cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
   transition: all 0.15s ease;
+}
+
+.btn-sync-action * {
+  pointer-events: none;
 }
 
 .btn-sync-action:hover {
@@ -833,18 +840,28 @@ body {
 
 .modal-backdrop {
   position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   inset: 0;
-  background: rgba(0, 0, 0, 0.6);
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  background: rgba(0, 0, 0, 0.65);
   backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
   display: none;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: 9999;
   padding: 1rem;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .modal-backdrop.is-open {
-  display: flex;
+  display: flex !important;
 }
 
 .modal-dialog {
@@ -853,8 +870,10 @@ body {
   border-radius: 12px;
   width: 100%;
   max-width: 480px;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
-  overflow: hidden;
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
+  margin: auto;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.35);
   animation: modalPop 0.18s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -1282,6 +1301,21 @@ body {
 
   .topbar-actions {
     width: 100%;
-    justify-content: space-between;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+    justify-content: flex-start;
+  }
+
+  .btn-sync-action,
+  .btn-primary-action {
+    flex: 1 1 auto;
+    justify-content: center;
+    min-height: 42px;
+  }
+
+  .theme-selector {
+    margin-left: auto;
   }
 }

@@ -13,6 +13,77 @@ let remainingSeconds = 300;
 let onSyncSuccessCallback = null;
 
 /**
+ * Cambia a la pestaña de compartir tablero (genera código).
+ */
+export function switchToShareTab() {
+  const tabShare = document.getElementById('tab-sync-share');
+  const tabClaim = document.getElementById('tab-sync-claim');
+  const viewShare = document.getElementById('view-sync-share');
+  const viewClaim = document.getElementById('view-sync-claim');
+
+  tabShare?.classList.add('active');
+  tabClaim?.classList.remove('active');
+  viewShare?.classList.remove('is-hidden');
+  viewClaim?.classList.add('is-hidden');
+  if (!activePin) {
+    requestNewPin();
+  }
+}
+
+/**
+ * Cambia a la pestaña de canjear código en este dispositivo.
+ */
+export function switchToClaimTab() {
+  const tabShare = document.getElementById('tab-sync-share');
+  const tabClaim = document.getElementById('tab-sync-claim');
+  const viewShare = document.getElementById('view-sync-share');
+  const viewClaim = document.getElementById('view-sync-claim');
+  const inputPin = document.getElementById('input-claim-pin');
+
+  tabClaim?.classList.add('active');
+  tabShare?.classList.remove('active');
+  viewClaim?.classList.remove('is-hidden');
+  viewShare?.classList.add('is-hidden');
+  stopSharingTimers();
+  setTimeout(() => inputPin?.focus(), 80);
+}
+
+/**
+ * Abre el diálogo de sincronización y genera PIN si está en la pestaña compartir.
+ */
+export function openSyncModal() {
+  const modal = document.getElementById('sync-modal');
+  if (!modal) return;
+
+  modal.classList.add('is-open');
+  modal.setAttribute('aria-hidden', 'false');
+
+  const tabShare = document.getElementById('tab-sync-share');
+  if (tabShare?.classList.contains('active')) {
+    requestNewPin();
+  }
+}
+
+/**
+ * Cierra el diálogo y limpia temporizadores y sondeos activos.
+ */
+export function closeSyncModal() {
+  const modal = document.getElementById('sync-modal');
+  if (!modal) return;
+
+  modal.classList.remove('is-open');
+  modal.setAttribute('aria-hidden', 'true');
+  stopSharingTimers();
+  resetShareView();
+}
+
+// Exponer en window para llamadas de respaldo directas desde HTML / inline onclick
+if (typeof window !== 'undefined') {
+  window.__openSyncModal = openSyncModal;
+  window.__closeSyncModal = closeSyncModal;
+}
+
+/**
  * Inicializa el gestor de sincronización de Kanban.
  * @param {Object} options
  * @param {Function} options.onDataRestored Callback al recibir datos para repintar el tablero
@@ -20,25 +91,45 @@ let onSyncSuccessCallback = null;
 export function initKanbanSync({ onDataRestored } = {}) {
   onSyncSuccessCallback = onDataRestored;
 
-  const btnOpen = document.getElementById('btn-open-sync');
   const modal = document.getElementById('sync-modal');
-  const btnClose = modal?.querySelectorAll('[data-close-sync-modal]');
-  const tabShare = document.getElementById('tab-sync-share');
-  const tabClaim = document.getElementById('tab-sync-claim');
-  const viewShare = document.getElementById('view-sync-share');
-  const viewClaim = document.getElementById('view-sync-claim');
   const formClaim = document.getElementById('form-sync-claim');
   const inputPin = document.getElementById('input-claim-pin');
   const btnRegen = document.getElementById('btn-regen-pin');
 
-  btnOpen?.addEventListener('click', () => {
-    openSyncModal();
-  });
+  // Delegación global en document para garantizar compatibilidad táctil / móvil
+  document.addEventListener('click', (e) => {
+    // Abrir modal de sincronización
+    if (e.target.closest('#btn-open-sync')) {
+      e.preventDefault();
+      openSyncModal();
+      return;
+    }
 
-  btnClose?.forEach(b => {
-    b.addEventListener('click', () => {
+    // Cerrar modal con botón de cierre
+    if (e.target.closest('[data-close-sync-modal]')) {
+      e.preventDefault();
       closeSyncModal();
-    });
+      return;
+    }
+
+    // Pestaña compartir
+    if (e.target.closest('#tab-sync-share')) {
+      e.preventDefault();
+      switchToShareTab();
+      return;
+    }
+
+    // Pestaña canjear
+    if (e.target.closest('#tab-sync-claim')) {
+      e.preventDefault();
+      switchToClaimTab();
+      return;
+    }
+
+    // Clic en el fondo del modal (backdrop)
+    if (e.target === modal) {
+      closeSyncModal();
+    }
   });
 
   // Cerrar al pulsar Escape
@@ -46,33 +137,6 @@ export function initKanbanSync({ onDataRestored } = {}) {
     if (e.key === 'Escape' && modal?.classList.contains('is-open')) {
       closeSyncModal();
     }
-  });
-
-  // Cerrar al pulsar el backdrop
-  modal?.addEventListener('click', (e) => {
-    if (e.target === modal) {
-      closeSyncModal();
-    }
-  });
-
-  // Pestañas (Compartir vs Canjear)
-  tabShare?.addEventListener('click', () => {
-    tabShare.classList.add('active');
-    tabClaim?.classList.remove('active');
-    viewShare?.classList.remove('is-hidden');
-    viewClaim?.classList.add('is-hidden');
-    if (!activePin) {
-      requestNewPin();
-    }
-  });
-
-  tabClaim?.addEventListener('click', () => {
-    tabClaim.classList.add('active');
-    tabShare?.classList.remove('active');
-    viewClaim?.classList.remove('is-hidden');
-    viewShare?.classList.add('is-hidden');
-    stopSharingTimers();
-    inputPin?.focus();
   });
 
   // Regenerar PIN si caducó
@@ -94,35 +158,6 @@ export function initKanbanSync({ onDataRestored } = {}) {
 
     await claimPin(rawPin);
   });
-}
-
-/**
- * Abre el diálogo de sincronización y genera PIN si está en la pestaña compartir.
- */
-function openSyncModal() {
-  const modal = document.getElementById('sync-modal');
-  if (!modal) return;
-
-  modal.classList.add('is-open');
-  modal.setAttribute('aria-hidden', 'false');
-
-  const tabShare = document.getElementById('tab-sync-share');
-  if (tabShare?.classList.contains('active')) {
-    requestNewPin();
-  }
-}
-
-/**
- * Cierra el diálogo y limpia temporizadores y sondeos activos.
- */
-function closeSyncModal() {
-  const modal = document.getElementById('sync-modal');
-  if (!modal) return;
-
-  modal.classList.remove('is-open');
-  modal.setAttribute('aria-hidden', 'true');
-  stopSharingTimers();
-  resetShareView();
 }
 
 /**

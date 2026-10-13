@@ -3,7 +3,7 @@
  * @description Service Worker con estrategia Cache-First para estáticos y Network-First para APIs.
  */
 
-const CACHE_NAME = 'horario-v6';
+const CACHE_NAME = 'horario-v7';
 
 const STATIC_ASSETS = [
   './',

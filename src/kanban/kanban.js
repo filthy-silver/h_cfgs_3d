@@ -400,9 +400,27 @@ function setupCardDelegation() {
 }
 
 /**
- * Inicialización completa al cargar el DOM.
+ * Configura y mantiene actualizado el Service Worker en la vista Kanban.
  */
-document.addEventListener('DOMContentLoaded', () => {
+function setupKanbanServiceWorker() {
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker
+        .register('./sw.js')
+        .then(reg => {
+          reg.update();
+        })
+        .catch(err => {
+          console.warn('[Kanban] SW registro omitido o fallido:', err);
+        });
+    });
+  }
+}
+
+/**
+ * Inicialización completa de la aplicación Kanban.
+ */
+function initKanbanApp() {
   // 1. Inicializar tema visual sincronizado con index.html
   initTheme();
 
@@ -438,4 +456,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // 7. Cargar datos unificados (Aules + Exámenes + Personales)
   loadUnifiedData();
-});
+
+  // 8. Service Worker
+  setupKanbanServiceWorker();
+}
+
+// Ejecutar inmediatamente si el DOM ya está listo (frecuente en móviles y PWA)
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initKanbanApp);
+} else {
+  initKanbanApp();
+}
