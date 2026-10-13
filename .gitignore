@@ -1,16 +1,14 @@
-# Dependencias y entornos
+# Dependencies
 node_modules/
-.env
-.env.local
-.dev.vars
 
-# Archivos del sistema
+# OS and editor files
 .DS_Store
 Thumbs.db
-Desktop.ini
-
-# Logs y temporales
 *.log
-.wrangler/
-dist/
-build/
+.vscode/
+.idea/
+
+# Local environment / secrets
+.env
+.env.*
+!.env.example

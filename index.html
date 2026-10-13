@@ -3,51 +3,69 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Horario Semanal - CFGS 3D</title>
-  
+  <title>Horario Semanal · CFGS Animaciones 3D</title>
+
+  <!-- PWA e Iconos -->
   <link rel="manifest" href="manifest.json" />
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+  <meta name="theme-color" content="#0369a1" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <link rel="apple-touch-icon" href="icon-192.png" />
-  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png" />
 
-  <link rel="stylesheet" href="css/styles.css" />
+  <!-- Estilos modulares -->
+  <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
 
-<div class="container">
+<div class="container" data-view-mode="auto">
+  <!-- Cabecera principal -->
   <header class="top-bar">
-    <div>
-      <h1>Horario semanal</h1>
-      <p id="today-date"></p>
-    </div>
-    
-    <div class="header-actions">
-      <!-- Botón de Suscripción a Calendario -->
-      <button type="button" class="btn-calendar" id="btn-open-calendar" aria-haspopup="dialog" aria-expanded="false" title="Sincronizar con calendario externo">
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20a2 2 0 002 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V9h14v11zM7 11h5v5H7z"/>
-        </svg>
-        <span>Calendario .ics</span>
-      </button>
-
-      <!-- Selector de Modo de Color -->
-      <div class="theme-selector" role="group" aria-label="Modo de color">
-        <button type="button" class="theme-btn" data-mode="auto">Auto</button>
-        <button type="button" class="theme-btn" data-mode="dark">Oscuro</button>
-        <button type="button" class="theme-btn" data-mode="light">Claro</button>
+    <div class="brand-title">
+      <img src="favicon.svg" alt="Logo CFGS 3D" class="brand-icon" width="36" height="36" />
+      <div>
+        <h1>Horario Semanal</h1>
+        <p id="today-date">Cargando fecha…</p>
       </div>
+    </div>
+
+    <!-- Barra de acciones y preferencias -->
+    <div class="header-actions">
+      <!-- Selector de Modo de Vista -->
+      <div class="segmented-group" role="group" aria-label="Modo de visualización" title="Cambiar modo de vista">
+        <button type="button" class="segmented-btn view-btn active" data-view="auto">Auto</button>
+        <button type="button" class="segmented-btn view-btn" data-view="table">Semana</button>
+        <button type="button" class="segmented-btn view-btn" data-view="timeline">Día</button>
+      </div>
+
+      <!-- Selector de Tema -->
+      <div class="segmented-group theme-selector" role="group" aria-label="Modo de color" title="Tema visual">
+        <button type="button" class="segmented-btn theme-btn" data-mode="auto">Auto</button>
+        <button type="button" class="segmented-btn theme-btn" data-mode="dark">Oscuro</button>
+        <button type="button" class="segmented-btn theme-btn" data-mode="light">Claro</button>
+      </div>
+
+      <!-- Acciones de Alumno -->
+      <button type="button" class="btn-pill" id="open-stats-btn" title="Ver desglose de horas por módulo">
+        📊 Horas
+      </button>
+      <button type="button" class="btn-pill" id="export-ics-btn" title="Descargar calendario compatible con Google Calendar, Apple y Outlook">
+        📅 Exportar .ics
+      </button>
+      <button type="button" class="btn-pill" id="print-btn" title="Imprimir u organizar en PDF">
+        🖨 Imprimir
+      </button>
     </div>
   </header>
 
-  <!-- Panel Dinámico Ahora / Siguiente -->
-  <section class="status-panel" aria-live="polite" aria-label="Estado actual de la jornada">
+  <!-- Panel Ahora / Siguiente -->
+  <section class="status-panel" aria-live="polite">
     <div class="status-card" id="card-now">
       <div class="label">Ahora</div>
       <div class="title" id="now-title">Cargando…</div>
       <div class="meta" id="now-meta"></div>
       <div class="timer" id="now-timer"></div>
-      <div class="progress" aria-hidden="true"><i id="now-progress"></i></div>
+      <div class="progress"><i id="now-progress"></i></div>
     </div>
     <div class="status-card" id="card-next">
       <div class="label">Siguiente</div>
@@ -56,16 +74,22 @@
     </div>
   </section>
 
-  <!-- Vista Móvil: Timeline vertical con WAI-ARIA Tabs -->
+  <!-- Banner de filtro activo de asignaturas -->
+  <aside class="filter-banner" id="filter-banner" aria-live="polite">
+    <span>Filtrando por módulo: <strong id="filter-subject-name"></strong></span>
+    <button type="button" id="reset-filter-btn">Mostrar todo</button>
+  </aside>
+
+  <!-- Vista Móvil: Timeline vertical por día -->
   <section class="timeline-view" aria-label="Horario del día">
-    <nav class="day-tabs" id="day-tabs" role="tablist" aria-label="Días lectivos">
+    <nav class="day-tabs" id="day-tabs" aria-label="Días lectivos">
       <button type="button" class="day-tab" data-day="1">Lun</button>
       <button type="button" class="day-tab" data-day="2">Mar</button>
       <button type="button" class="day-tab" data-day="3">Mié</button>
       <button type="button" class="day-tab" data-day="4">Jue</button>
       <button type="button" class="day-tab" data-day="5">Vie</button>
     </nav>
-    <div class="timeline-list" id="timeline-list" role="tabpanel"></div>
+    <div class="timeline-list" id="timeline-list"></div>
   </section>
 
   <!-- Vista Escritorio: Tabla semanal completa -->
@@ -85,36 +109,247 @@
     </table>
   </main>
 
-  <aside class="legend-bar" id="legend" aria-label="Leyenda de asignaturas"></aside>
+  <!-- Barra de leyenda interactiva -->
+  <footer class="legend-wrapper">
+    <aside class="legend-bar" id="legend" aria-label="Leyenda de asignaturas"></aside>
+  </footer>
 
-  <!-- Panel de Próximas Entregas (Aules / Moodle) -->
-  <section id="assignments-panel" class="assignments-panel" aria-label="Próximas entregas"></section>
+  <!-- ───────── Panel Inferior: Tareas y Exámenes Unificados ───────── -->
+  <section class="tasks-panel" id="tasks-panel" aria-label="Tareas y exámenes pendientes">
+    <div class="tasks-panel-header">
+      <div class="tasks-title-group">
+        <h2>📌 Tareas y Exámenes</h2>
+        <span class="tasks-counter-pill" id="tasks-count-pill">0 pendientes</span>
+      </div>
+
+      <div class="tasks-toolbar">
+        <!-- Filtros rápidos de visualización -->
+        <div class="task-filter-group" role="group" aria-label="Filtrar tareas">
+          <button type="button" class="task-filter-btn active" data-task-filter="all">Todos</button>
+          <button type="button" class="task-filter-btn" data-task-filter="exams">⚠️ Solo Exámenes</button>
+          <button type="button" class="task-filter-btn" data-task-filter="pending">Pendientes</button>
+          <button type="button" class="task-filter-btn" data-task-filter="completed">Completadas</button>
+        </div>
+
+        <!-- Botón para iniciar sesión de profesor con PIN -->
+        <button type="button" class="btn-pill" id="btn-open-pin" title="Identificarse como profesor o delegado para añadir exámenes">
+          🔐 Modo Profesor
+        </button>
+      </div>
+    </div>
+
+    <!-- Banner activo de sesión de profesor/administrador -->
+    <div class="admin-banner" id="admin-banner">
+      <div class="admin-banner-text">
+        <span>🟢 Sesión de Profesor activa</span>
+      </div>
+      <div style="display:flex; gap:0.5rem; align-items:center;">
+        <button type="button" class="btn-pill btn-primary" id="btn-new-task">
+          + Añadir Tarea/Examen
+        </button>
+        <button type="button" class="btn-pill" id="btn-logout-admin">
+          Cerrar Sesión
+        </button>
+      </div>
+    </div>
+
+    <!-- Lista / Tarjetas de tareas y exámenes -->
+    <div class="tasks-list" id="tasks-list">
+      <!-- Se generan dinámicamente con app.js -->
+    </div>
+  </section>
 </div>
 
-<!-- Diálogo / Modal de Suscripción a Calendario (.ics) -->
-<div class="modal-backdrop" id="calendar-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" aria-hidden="true">
-  <div class="modal-dialog">
+<!-- Modal: Detalle de Módulo y Notas Personales -->
+<div class="modal-backdrop" id="subject-modal" role="dialog" aria-modal="true" aria-hidden="true">
+  <div class="modal-box">
     <div class="modal-header">
-      <h2 class="modal-title" id="modal-title">Sincronizar Calendario</h2>
-      <button type="button" class="modal-close" id="btn-close-calendar" aria-label="Cerrar diálogo">&times;</button>
+      <div class="modal-title-group">
+        <h3 id="modal-subject-name">Módulo</h3>
+        <p class="modal-subtitle" id="modal-subject-code">Código · Especialidad</p>
+      </div>
+      <button type="button" class="modal-close-btn" id="modal-close-btn" aria-label="Cerrar modal">&times;</button>
     </div>
+
     <div class="modal-body">
-      <p>Suscríbete desde tu móvil o aplicación favorita para que tu horario se actualice automáticamente en Google Calendar, Apple Calendar o Microsoft Outlook.</p>
-      
-      <div class="modal-feed-url">
-        <input type="text" id="feed-url-input" readonly aria-label="URL del feed iCal" />
-        <button type="button" id="btn-copy-feed">Copiar</button>
+      <div class="info-grid">
+        <div class="info-item">
+          <span>Aula / Profesorado</span>
+          <p id="modal-meta">-</p>
+        </div>
+        <div class="info-item">
+          <span>Carga Horaria</span>
+          <p id="modal-hours">-</p>
+        </div>
       </div>
 
-      <div class="modal-actions">
-        <a id="btn-download-ics" class="modal-btn primary" download="horario_cfgs_3d.ics">Descargar .ics</a>
-        <a id="btn-add-google" class="modal-btn">Google Calendar</a>
-        <a id="btn-add-apple" class="modal-btn">Apple / Outlook</a>
+      <div class="info-item">
+        <span>Descripción del módulo</span>
+        <p id="modal-desc" style="font-size: 0.85rem; color: var(--muted); margin-top: 0.25rem;"></p>
       </div>
+
+      <div>
+        <div class="notes-label">
+          <span>Notas personales del alumno</span>
+          <span class="notes-hint">Guardadas en este navegador</span>
+        </div>
+        <textarea id="modal-notes-input" class="notes-textarea" placeholder="Ej: Traer tableta gráfica, fecha de entrega del proyecto, enlaces a Drive..."></textarea>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button type="button" class="btn-pill" id="modal-cancel-btn">Cancelar</button>
+      <button type="button" class="btn-pill btn-primary" id="modal-save-btn">
+        Guardar nota
+      </button>
     </div>
   </div>
 </div>
 
-<script type="module" src="src/main.js"></script>
+<!-- Modal: Estadísticas y Carga Horaria -->
+<div class="modal-backdrop" id="stats-modal" role="dialog" aria-modal="true" aria-hidden="true">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="modal-title-group">
+        <h3>Carga Lectiva Semanal</h3>
+        <p class="modal-subtitle" id="stats-total-hours">Total horas / semana</p>
+      </div>
+      <button type="button" class="modal-close-btn" id="stats-close-btn" aria-label="Cerrar modal">&times;</button>
+    </div>
+
+    <div class="modal-body">
+      <div class="stats-list" id="stats-breakdown-list"></div>
+    </div>
+
+    <div class="modal-footer">
+      <button type="button" class="btn-pill" id="stats-ok-btn">Entendido</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Autenticación con PIN de Profesor -->
+<div class="modal-backdrop" id="pin-modal" role="dialog" aria-modal="true" aria-hidden="true">
+  <div class="modal-box" style="max-width: 380px;">
+    <div class="modal-header">
+      <div class="modal-title-group">
+        <h3>Acceso Profesor / Delegado</h3>
+        <p class="modal-subtitle">Introduce el PIN para gestionar exámenes</p>
+      </div>
+      <button type="button" class="modal-close-btn" id="pin-close-btn" aria-label="Cerrar modal">&times;</button>
+    </div>
+
+    <form id="pin-form">
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label" for="pin-input">PIN de seguridad (Edge Secret):</label>
+          <input
+            type="password"
+            id="pin-input"
+            class="form-input"
+            inputmode="numeric"
+            placeholder="Introduce el PIN"
+            autocomplete="off"
+            required
+          />
+          <p id="pin-error-msg" style="display:none; color:#ef4444; font-size:0.78rem; margin-top:0.25rem;">
+            PIN incorrecto. Inténtalo de nuevo.
+          </p>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn-pill" id="pin-cancel-btn">Cancelar</button>
+        <button type="submit" class="btn-pill btn-primary" id="pin-submit-btn">
+          Verificar PIN
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: Crear / Editar Tarea o Examen -->
+<div class="modal-backdrop" id="task-modal" role="dialog" aria-modal="true" aria-hidden="true">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="modal-title-group">
+        <h3 id="task-modal-title">Añadir Tarea o Examen</h3>
+        <p class="modal-subtitle">Se sincronizará en tiempo real con toda la clase</p>
+      </div>
+      <button type="button" class="modal-close-btn" id="task-modal-close-btn" aria-label="Cerrar modal">&times;</button>
+    </div>
+
+    <form id="task-form">
+      <div class="modal-body">
+        <input type="hidden" id="task-form-id" value="" />
+
+        <div class="form-group">
+          <label class="form-label" for="task-form-title">Título de la actividad *</label>
+          <input
+            type="text"
+            id="task-form-title"
+            class="form-input"
+            placeholder="Ej: Examen Parcial Tema 1-4 / Entrega Storyboard"
+            required
+          />
+        </div>
+
+        <div class="form-grid-2">
+          <div class="form-group">
+            <label class="form-label" for="task-form-mod">Asignatura / Módulo *</label>
+            <select id="task-form-mod" class="form-select" required>
+              <!-- Rellenado dinámicamente con app.js -->
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="task-form-type">Tipo de evento *</label>
+            <select id="task-form-type" class="form-select" required>
+              <option value="examen">⚠️ Examen (Destacado)</option>
+              <option value="entrega">📦 Entrega de Proyecto</option>
+              <option value="tarea">📋 Tarea / Práctica</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-grid-2">
+          <div class="form-group">
+            <label class="form-label" for="task-form-date">Fecha de vencimiento *</label>
+            <input type="date" id="task-form-date" class="form-input" required />
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="task-form-time">Hora / Tramo (opcional)</label>
+            <input type="time" id="task-form-time" class="form-input" />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="task-form-notes">Instrucciones o temario a preparar</label>
+          <textarea
+            id="task-form-notes"
+            class="form-textarea"
+            rows="3"
+            placeholder="Ej: Subir PDF a Aules antes de las 23:59. Entra todo el tema de rigging bípedo."
+          ></textarea>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn-pill" id="task-form-cancel-btn">Cancelar</button>
+        <button type="submit" class="btn-pill btn-primary" id="task-form-submit-btn">
+          Guardar Evento
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Notificación Toast -->
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<!-- Scripts modulares -->
+<script src="js/data.js"></script>
+<script src="js/app.js"></script>
+
 </body>
 </html>

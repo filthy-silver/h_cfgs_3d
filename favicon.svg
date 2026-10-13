@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <rect width="64" height="64" rx="14" fill="#0b1120"/>
+  <!-- Cubo 3D isométrico -->
+  <!-- Cara superior -->
+  <polygon points="32,14 50,24 32,34 14,24" fill="#38bdf8"/>
+  <!-- Cara izquierda -->
+  <polygon points="14,24 32,34 32,52 14,42" fill="#0284c7"/>
+  <!-- Cara derecha -->
+  <polygon points="32,34 50,24 50,42 32,52" fill="#0369a1"/>
+  <!-- Aristas interiores sutiles -->
+  <polyline points="14,24 32,34 50,24" fill="none" stroke="#e0f2fe" stroke-width="0.8" opacity="0.6"/>
+  <line x1="32" y1="34" x2="32" y2="52" stroke="#bae6fd" stroke-width="0.8" opacity="0.4"/>
+</svg>

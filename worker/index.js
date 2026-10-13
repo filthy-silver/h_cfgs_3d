@@ -1,14 +1,28 @@
 /**
  * @file worker/index.js
- * @description Cloudflare Worker standalone para endpoints de API y despacho de feed iCalendar.
+ * @description Cloudflare Worker standalone para endpoints de API, despacho de feed iCalendar y gestión de eventos con PIN.
  */
 
 import { generateIcsFeed } from '../functions/api/calendar.ics.js';
 import { onRequest as handleAulesRequest } from '../functions/api/aules.js';
+import {
+  onRequestGet as handleEventsGet,
+  onRequestPost as handleEventsPost,
+  onRequestDelete as handleEventsDelete,
+  onRequestOptions as handleEventsOptions
+} from '../functions/api/events.js';
 
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+
+    // Endpoint de gestión de tareas y exámenes con PIN
+    if (url.pathname === '/api/events') {
+      if (request.method === 'OPTIONS') return handleEventsOptions({ request, env, ctx });
+      if (request.method === 'GET') return handleEventsGet({ request, env, ctx });
+      if (request.method === 'POST') return handleEventsPost({ request, env, ctx });
+      if (request.method === 'DELETE') return handleEventsDelete({ request, env, ctx });
+    }
 
     // Endpoint de entregas de Aules (Moodle)
     if (url.pathname === '/api/aules') {
