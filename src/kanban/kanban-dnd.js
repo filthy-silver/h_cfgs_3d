@@ -8,16 +8,36 @@
  * Inicializa los controladores de Drag & Drop nativo de HTML5 en las columnas y tarjetas.
  * @param {Object} options
  * @param {Function} options.onCardMoved Callback cuando una tarjeta cambia de columna o posición: (cardId, newColumnId) => void
+ * @param {Function} [options.onCardClicked] Callback de recuperación cuando una pulsación sobre una tarjeta disparó dragstart pero terminó como clic
  */
-export function initKanbanDnD({ onCardMoved }) {
+export function initKanbanDnD({ onCardMoved, onCardClicked } = {}) {
   let draggedCard = null;
   let draggedCardId = null;
   let sourceParent = null;
   let sourceNextSibling = null;
   let dropOccurred = false;
 
+  let dragStartX = 0;
+  let dragStartY = 0;
+  let dragStartTime = 0;
+
+  // Registrar posición inicial del puntero para discriminar entre micro-movimiento/clic y arrastre real
+  document.addEventListener('pointerdown', (e) => {
+    const card = e.target.closest('.kanban-card');
+    if (!card) return;
+    dragStartX = e.clientX;
+    dragStartY = e.clientY;
+    dragStartTime = Date.now();
+  }, { passive: true });
+
   // 1. Delegación de eventos en las tarjetas
   document.addEventListener('dragstart', (e) => {
+    // Si el arrastre se inició sobre un enlace, botón, selector o control interactivo, cancelarlo
+    if (e.target.closest('a, button, select, input, textarea, .card-link, .card-move-control, .card-actions-row')) {
+      e.preventDefault();
+      return;
+    }
+
     const card = e.target.closest('.kanban-card');
     if (!card) return;
 
@@ -36,7 +56,15 @@ export function initKanbanDnD({ onCardMoved }) {
     });
   });
 
-  document.addEventListener('dragend', () => {
+  document.addEventListener('dragend', (e) => {
+    const endX = e.clientX;
+    const endY = e.clientY;
+    const dist = Math.hypot(endX - dragStartX, endY - dragStartY);
+    const duration = Date.now() - dragStartTime;
+
+    const currentDragged = draggedCard;
+    const currentId = draggedCardId;
+
     if (draggedCard) {
       draggedCard.classList.remove('is-dragging');
 
@@ -54,6 +82,14 @@ export function initKanbanDnD({ onCardMoved }) {
     document.querySelectorAll('.kanban-column').forEach(col => {
       col.classList.remove('drag-over');
     });
+
+    // Si el navegador canceló el evento click debido a un micro-movimiento involuntario durante la pulsación
+    // (distancia < 8px y duración < 500ms sin drop), recuperar el clic de la tarjeta:
+    if (!dropOccurred && dist < 8 && duration < 500 && currentId) {
+      if (typeof onCardClicked === 'function') {
+        onCardClicked(currentId, currentDragged);
+      }
+    }
 
     draggedCard = null;
     draggedCardId = null;

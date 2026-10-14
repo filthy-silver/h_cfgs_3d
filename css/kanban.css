@@ -380,7 +380,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
-  cursor: grab;
+  cursor: pointer;
   user-select: none;
   transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
@@ -393,7 +393,7 @@ body {
 }
 
 .kanban-card:active {
-  cursor: grabbing;
+  cursor: pointer;
 }
 
 /* Estado mientras se arrastra la tarjeta */
@@ -423,11 +423,45 @@ body {
   gap: 0.5rem;
 }
 
+.card-top-right {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-left: auto;
+}
+
+.card-drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  opacity: 0.4;
+  cursor: grab;
+  padding: 3px;
+  border-radius: 4px;
+  transition: opacity 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.kanban-card:hover .card-drag-handle {
+  opacity: 0.85;
+}
+
+.card-drag-handle:hover {
+  opacity: 1;
+  color: var(--text);
+  background: var(--surface-2);
+}
+
+.card-drag-handle:active {
+  cursor: grabbing;
+}
+
 .card-badges {
   display: flex;
   align-items: center;
   gap: 0.35rem;
   flex-wrap: wrap;
+  pointer-events: none;
 }
 
 .badge {
@@ -516,6 +550,7 @@ body {
   font-weight: 600;
   line-height: 1.35;
   color: var(--text);
+  pointer-events: none;
 }
 
 /* Observaciones / Notas */
@@ -527,6 +562,7 @@ body {
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  pointer-events: none;
 }
 
 /* Pie de tarjeta */
@@ -547,6 +583,7 @@ body {
   align-items: center;
   gap: 0.4rem;
   flex-wrap: wrap;
+  pointer-events: none;
 }
 
 .due-date-text {
@@ -569,10 +606,19 @@ body {
   color: var(--accent);
   text-decoration: none;
   font-weight: 600;
+  cursor: pointer;
+  pointer-events: auto;
+  position: relative;
+  z-index: 5;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: all 0.15s ease;
 }
 
 .card-link:hover {
   text-decoration: underline;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
 }
 
 /* Selector rápido de columna para móvil y accesibilidad */
@@ -1478,6 +1524,7 @@ body {
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  pointer-events: none;
 }
 
 .card-deliverables {
@@ -1485,6 +1532,7 @@ body {
   flex-wrap: wrap;
   gap: 0.25rem;
   margin: 0.3rem 0 0.15rem;
+  pointer-events: none;
 }
 
 .deliverable-tag {
@@ -1496,6 +1544,7 @@ body {
   background: color-mix(in srgb, var(--accent) 12%, transparent);
   color: var(--accent);
   border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
+  pointer-events: none;
 }
 
 .card-detail-hint {
@@ -1509,6 +1558,7 @@ body {
   margin-top: 0.25rem;
   opacity: 0.8;
   transition: opacity 0.15s ease, color 0.15s ease;
+  pointer-events: none;
 }
 
 .kanban-card.is-aules:hover .card-detail-hint {

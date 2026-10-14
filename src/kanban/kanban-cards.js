@@ -154,7 +154,7 @@ export function renderCardHtml(item, currentColumn) {
   // Enlace externo (Aules)
   const safeAulesUrl = (isAules && item.url) ? sanitizeUrl(item.url) : '';
   const aulesLinkHtml = safeAulesUrl
-    ? `<a href="${safeAulesUrl}" target="_blank" rel="noopener noreferrer" class="card-link" title="Abrir entrega directamente en Moodle Aules" onclick="event.stopPropagation()">
+    ? `<a href="${safeAulesUrl}" target="_blank" rel="noopener noreferrer" class="card-link" draggable="false" data-action="open-aules-link" title="Abrir entrega directamente en Moodle Aules">
         <span>Aules ↗</span>
       </a>`
     : '';
@@ -188,10 +188,10 @@ export function renderCardHtml(item, currentColumn) {
   // Botones de acción para tarjetas personales (editar / eliminar)
   const personalActionsHtml = isPersonal
     ? `<div class="card-actions-row">
-        <button type="button" class="btn-card-icon btn-edit-task" data-action="edit" data-id="${item.id}" title="Editar tarea personal" aria-label="Editar tarea">
+        <button type="button" class="btn-card-icon btn-edit-task" data-action="edit" data-id="${item.id}" draggable="false" title="Editar tarea personal" aria-label="Editar tarea">
           <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a.996.996 0 000-1.41l-2.34-2.34a.996.996 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
         </button>
-        <button type="button" class="btn-card-icon btn-delete-task" data-action="delete" data-id="${item.id}" title="Eliminar tarea personal" aria-label="Eliminar tarea">
+        <button type="button" class="btn-card-icon btn-delete-task" data-action="delete" data-id="${item.id}" draggable="false" title="Eliminar tarea personal" aria-label="Eliminar tarea">
           <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
         </button>
       </div>`
@@ -199,15 +199,19 @@ export function renderCardHtml(item, currentColumn) {
 
   // Selector rápido para mover entre columnas (Accesibilidad móvil & teclado)
   const columnSelectorHtml = `
-    <div class="card-move-control" aria-label="Mover tarjeta a otra columna" onclick="event.stopPropagation()">
+    <div class="card-move-control" aria-label="Mover tarjeta a otra columna" draggable="false">
       <label class="sr-only" for="move-select-${item.id}">Mover estado</label>
-      <select id="move-select-${item.id}" class="card-move-select" data-move-id="${item.id}">
+      <select id="move-select-${item.id}" class="card-move-select" data-move-id="${item.id}" draggable="false">
         <option value="pending" ${currentColumn === 'pending' ? 'selected' : ''}>⏳ Pendiente</option>
         <option value="in-progress" ${currentColumn === 'in-progress' ? 'selected' : ''}>⚡ Trabajando</option>
         <option value="done" ${currentColumn === 'done' ? 'selected' : ''}>✅ Hecho</option>
       </select>
     </div>
   `;
+
+  const cardAriaTitle = isAules
+    ? 'Haz clic para ver el resumen detallado y requisitos'
+    : (isExam ? 'Haz clic para ver los detalles del examen' : 'Haz clic para editar esta tarea');
 
   return `
     <article
@@ -218,8 +222,9 @@ export function renderCardHtml(item, currentColumn) {
       data-id="${item.id}"
       data-type="${item.type}"
       data-column="${currentColumn}"
-      role="${isAules ? 'button' : 'listitem'}"
-      ${isAules ? 'aria-haspopup="dialog" title="Haz clic para ver el resumen detallado y requisitos"' : ''}
+      role="button"
+      aria-haspopup="dialog"
+      title="${cardAriaTitle}"
       tabindex="0"
     >
       <div class="card-top-bar">
@@ -229,7 +234,14 @@ export function renderCardHtml(item, currentColumn) {
           </span>
           ${typeBadgeHtml}
         </div>
-        ${personalActionsHtml}
+        <div class="card-top-right">
+          ${personalActionsHtml}
+          <div class="card-drag-handle" title="Arrastrar tarjeta para cambiar de columna" aria-label="Arrastrar tarjeta" draggable="false">
+            <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true">
+              <path fill="currentColor" d="M9 5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm0 7a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm0 7a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm9-14a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm0 7a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm0 7a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0z"/>
+            </svg>
+          </div>
+        </div>
       </div>
 
       <h3 class="card-title">${escapeHtml(cleanTitle)}</h3>

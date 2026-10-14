@@ -280,16 +280,31 @@ function closePersonalTaskModal() {
 }
 
 /**
- * Abre el diálogo de detalle enriquecido para una entrega de Aules.
+ * Abre el diálogo de detalle enriquecido para una entrega de Aules o convocatoria de examen.
  * @param {Object} item
  */
 function openAssignmentDetailModal(item) {
   const modal = document.getElementById('assignment-detail-modal');
   if (!modal || !item) return;
 
+  const isExam = item.type === 'exam';
+  const isAules = item.type === 'aules';
+
   const subject = resolveCardSubject(item);
   const { formattedDate, relativeBadge, isUrgent } = formatCardDueDate(item.dueIso || item.dueTimestamp);
   const cleanTitle = (item.title || '').replace(/^(Venciment de |Vencimiento de )/i, '').trim();
+
+  // Distintivo de tipo
+  const typeBadgeEl = document.getElementById('assignment-detail-type-badge');
+  if (typeBadgeEl) {
+    if (isExam) {
+      typeBadgeEl.textContent = '📝 Examen';
+      typeBadgeEl.className = 'badge badge-exam';
+    } else {
+      typeBadgeEl.textContent = '📚 Aules';
+      typeBadgeEl.className = 'badge badge-aules';
+    }
+  }
 
   // Badge de módulo
   const badgeSub = document.getElementById('assignment-detail-badge-sub');
@@ -317,22 +332,42 @@ function openAssignmentDetailModal(item) {
     urgencyEl.className = `assignment-urgency-badge ${isUrgent ? 'urgent' : ''}`;
   }
 
+  // Icono y encabezado de la sección de resumen
+  const summaryIconEl = document.getElementById('assignment-summary-icon');
+  const sectionHeadingEl = document.getElementById('assignment-detail-section-heading');
+  if (summaryIconEl) {
+    summaryIconEl.textContent = isExam ? '📝' : '⚡';
+  }
+  if (sectionHeadingEl) {
+    sectionHeadingEl.textContent = isExam ? 'Detalles de la convocatoria' : 'Resumen de la entrega';
+  }
+
   // Resumen inteligente (Párrafo o Short)
   const paragraphEl = document.getElementById('assignment-detail-paragraph');
   const aiSourceEl = document.getElementById('assignment-detail-ai-source');
-  const summaryParagraph = item.aiSummary?.paragraph || item.aiSummary?.short || item.description || 'Consulta los detalles en el enlace de Aules.';
+  let summaryParagraph = '';
+  if (isExam) {
+    summaryParagraph = item.description || item.notes || 'Examen oficial programado en el calendario escolar de CFGS 3D.';
+  } else {
+    summaryParagraph = item.aiSummary?.paragraph || item.aiSummary?.short || item.description || 'Consulta los detalles en el enlace de Aules.';
+  }
+
   if (paragraphEl) {
     paragraphEl.textContent = summaryParagraph;
   }
   if (aiSourceEl) {
-    aiSourceEl.textContent = item.aiSummary?.source === 'ai' ? '⚡ Resumen Workers AI' : 'Resumen inteligente';
+    if (isExam) {
+      aiSourceEl.textContent = 'Examen Oficial';
+    } else {
+      aiSourceEl.textContent = item.aiSummary?.source === 'ai' ? '⚡ Resumen Workers AI' : 'Resumen inteligente';
+    }
   }
 
-  // Entregables
+  // Entregables requeridos (solo aplicable a entregas de Aules con especificaciones)
   const deliverablesBox = document.getElementById('assignment-deliverables-box');
   const deliverablesList = document.getElementById('assignment-detail-deliverables');
   const deliverables = Array.isArray(item.aiSummary?.deliverables) ? item.aiSummary.deliverables : [];
-  if (deliverables.length > 0 && deliverablesList) {
+  if (!isExam && deliverables.length > 0 && deliverablesList) {
     deliverablesList.innerHTML = deliverables
       .map(ext => `<span class="deliverable-tag-large">${escapeHtml(ext)}</span>`)
       .join('');
@@ -351,11 +386,20 @@ function openAssignmentDetailModal(item) {
     fullDetailsWrapper?.classList.add('is-hidden');
   }
 
-  // Enlace directo a Aules (Sanitizado rigurosamente)
+  // Enlace directo a Aules o recurso externo
   const linkEl = document.getElementById('assignment-detail-link');
+  const linkTextEl = document.getElementById('assignment-detail-link-text');
   if (linkEl) {
     const safeUrl = sanitizeUrl(item.url);
-    linkEl.href = safeUrl || 'https://aules.edu.gva.es/fp/';
+    if (isExam && !safeUrl) {
+      linkEl.classList.add('is-hidden');
+    } else {
+      linkEl.classList.remove('is-hidden');
+      linkEl.href = safeUrl || 'https://aules.edu.gva.es/fp/';
+      if (linkTextEl) {
+        linkTextEl.textContent = isExam ? 'Ver recurso del examen' : 'Ir a la entrega en Aules';
+      }
+    }
   }
 
   lastActiveElement = document.activeElement;
@@ -459,8 +503,30 @@ function setupModalEvents() {
   });
 }
 
+let lastCardActivationTime = 0;
+
 /**
- * Delegación de eventos para acciones en las tarjetas (editar, eliminar, detalle Aules, selector móvil de columna).
+ * Abre el diálogo correspondiente según el tipo de tarjeta (Aules, Examen oficial o Tarea personal).
+ * @param {string} cardId
+ */
+function handleCardActivation(cardId) {
+  if (!cardId) return;
+  if (Date.now() - lastCardActivationTime < 350) return;
+  lastCardActivationTime = Date.now();
+
+  const item = allItems.find(i => String(i.id).trim() === String(cardId).trim());
+  if (!item) return;
+
+  if (item.type === 'personal') {
+    openPersonalTaskModal(item.id);
+  } else {
+    // Entregas de Aules o Exámenes de convocatoria
+    openAssignmentDetailModal(item);
+  }
+}
+
+/**
+ * Delegación de eventos para acciones en las tarjetas (editar, eliminar, detalle Aules/Exámenes, selector móvil de columna).
  */
 function setupCardDelegation() {
   // Manejo de pulsación de teclado (Enter o Espacio) en tarjetas accesibles con role="button"
@@ -469,20 +535,22 @@ function setupCardDelegation() {
       // Ignorar si el foco está en un selector o botón interno
       if (e.target.closest('a, select, button, input, textarea')) return;
 
-      const aulesCard = e.target.closest('.kanban-card.is-aules');
-      if (aulesCard) {
+      const card = e.target.closest('.kanban-card');
+      if (card) {
         e.preventDefault();
-        const cardId = aulesCard.dataset.id;
-        const item = allItems.find(i => i.id === cardId);
-        if (item) {
-          openAssignmentDetailModal(item);
-        }
+        handleCardActivation(card.dataset.id);
       }
     }
   });
 
   document.addEventListener('click', (e) => {
-    // Editar tarea personal
+    // 1. Enlace directo a Aules: permitir navegación nativa a Moodle y NO abrir el modal
+    const aulesLink = e.target.closest('.card-link, [data-action="open-aules-link"]');
+    if (aulesLink) {
+      return;
+    }
+
+    // 2. Editar tarea personal
     const editBtn = e.target.closest('.btn-edit-task');
     if (editBtn) {
       const id = editBtn.dataset.id;
@@ -490,27 +558,27 @@ function setupCardDelegation() {
       return;
     }
 
-    // Eliminar tarea personal
+    // 3. Eliminar tarea personal
     const deleteBtn = e.target.closest('.btn-delete-task');
     if (deleteBtn) {
       const id = deleteBtn.dataset.id;
       if (confirm('¿Deseas eliminar esta tarea personal?')) {
         deletePersonalTask(id);
-        allItems = allItems.filter(item => item.id !== id);
+        allItems = allItems.filter(item => String(item.id).trim() !== String(id).trim());
         renderBoard();
       }
       return;
     }
 
-    // Abrir modal de detalle para tarjetas de Aules (al hacer clic en cualquier parte de la tarjeta o en el hint)
-    const aulesCard = e.target.closest('.kanban-card.is-aules');
-    if (aulesCard && !e.target.closest('a, select, button, .card-actions-row, .card-move-control')) {
-      const cardId = aulesCard.dataset.id;
-      const item = allItems.find(i => i.id === cardId);
-      if (item) {
-        openAssignmentDetailModal(item);
-        return;
-      }
+    // 4. Ignorar controles de mover estado y botones internos
+    if (e.target.closest('.card-move-control, select, .card-actions-row, .card-drag-handle')) {
+      return;
+    }
+
+    // 5. Clic en la ficha completa (Aules, Examen oficial o Tarea personal)
+    const card = e.target.closest('.kanban-card');
+    if (card) {
+      handleCardActivation(card.dataset.id);
     }
   });
 
@@ -569,11 +637,14 @@ function initKanbanApp() {
   // 1. Inicializar tema visual sincronizado con index.html
   initTheme();
 
-  // 2. Inicializar Drag & Drop nativo
+  // 2. Inicializar Drag & Drop nativo con recuperación ante micro-movimientos
   initKanbanDnD({
     onCardMoved: (cardId, newColumnId) => {
       setCardColumn(cardId, newColumnId);
       updateBoardCounters();
+    },
+    onCardClicked: (cardId) => {
+      handleCardActivation(cardId);
     }
   });
 
