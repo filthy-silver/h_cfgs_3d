@@ -206,8 +206,32 @@ export function generateDefaultNickname(fingerprint) {
  * @param {Object} payload
  * @returns {Promise<string>} Firma en Base64
  */
+/**
+ * Serializa un objeto JSON de forma canónica (ordenando claves alfabéticamente de forma recursiva)
+ * para garantizar que firmas y hashes sean 100% reproducibles e independientes del orden de inserción.
+ * @param {any} obj
+ * @returns {string}
+ */
+export function canonicalJsonString(obj) {
+  if (obj === null || typeof obj !== 'object') {
+    return JSON.stringify(obj);
+  }
+  if (Array.isArray(obj)) {
+    return '[' + obj.map(item => canonicalJsonString(item)).join(',') + ']';
+  }
+  const sortedKeys = Object.keys(obj).sort();
+  const pairs = sortedKeys.map(k => `${JSON.stringify(k)}:${canonicalJsonString(obj[k])}`);
+  return '{' + pairs.join(',') + '}';
+}
+
+/**
+ * Firma un objeto de datos JSON con la clave privada del usuario usando serialización canónica.
+ * @param {CryptoKey} privateKey
+ * @param {Object} payload
+ * @returns {Promise<string>} Firma en Base64
+ */
 export async function signPayload(privateKey, payload) {
-  const jsonString = JSON.stringify(payload);
+  const jsonString = canonicalJsonString(payload);
   const encoder = new TextEncoder();
   const data = encoder.encode(jsonString);
 
@@ -221,7 +245,7 @@ export async function signPayload(privateKey, payload) {
 }
 
 /**
- * Verifica la firma criptográfica de un payload recibido.
+ * Verifica la firma criptográfica de un payload recibido con serialización canónica.
  * @param {string|CryptoKey} publicKeyOrSpki - Instancia CryptoKey o cadena SPKI Base64
  * @param {Object} payload
  * @param {string} signatureBase64
@@ -241,7 +265,7 @@ export async function verifyPayload(publicKeyOrSpki, payload, signatureBase64) {
       );
     }
 
-    const jsonString = JSON.stringify(payload);
+    const jsonString = canonicalJsonString(payload);
     const data = new TextEncoder().encode(jsonString);
     const signature = base64ToBuffer(signatureBase64);
 
@@ -255,6 +279,61 @@ export async function verifyPayload(publicKeyOrSpki, payload, signatureBase64) {
     console.warn('[Crypto] Error verificando firma:', err);
     return false;
   }
+}
+
+/**
+ * Cifra la clave privada JWK usando una clave simétrica AES-GCM derivada de la frase mnemónica (12 palabras).
+ * @param {JsonWebKey} privateJwk
+ * @param {string} mnemonic
+ * @returns {Promise<{ ciphertext: string, iv: string }>}
+ */
+export async function encryptPrivateKeyWithMnemonic(privateJwk, mnemonic) {
+  const seedBytes = mnemonicToBytes(mnemonic);
+  const baseKey = await crypto.subtle.importKey('raw', seedBytes, { name: 'PBKDF2' }, false, ['deriveKey']);
+  const salt = new TextEncoder().encode('cfgs-3d-identity-vault-salt');
+  const encKey = await crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' },
+    baseKey,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt']
+  );
+
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const rawData = new TextEncoder().encode(JSON.stringify(privateJwk));
+  const cipherBuffer = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, encKey, rawData);
+
+  return {
+    ciphertext: bufferToBase64(cipherBuffer),
+    iv: bufferToBase64(iv)
+  };
+}
+
+/**
+ * Descifra la clave privada JWK a partir del paquete cifrado y las 12 palabras.
+ * @param {string} ciphertextBase64
+ * @param {string} ivBase64
+ * @param {string} mnemonic
+ * @returns {Promise<JsonWebKey>}
+ */
+export async function decryptPrivateKeyWithMnemonic(ciphertextBase64, ivBase64, mnemonic) {
+  const seedBytes = mnemonicToBytes(mnemonic);
+  const baseKey = await crypto.subtle.importKey('raw', seedBytes, { name: 'PBKDF2' }, false, ['deriveKey']);
+  const salt = new TextEncoder().encode('cfgs-3d-identity-vault-salt');
+  const encKey = await crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' },
+    baseKey,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['decrypt']
+  );
+
+  const iv = base64ToBuffer(ivBase64);
+  const cipherBuffer = base64ToBuffer(ciphertextBase64);
+  const decryptedBuffer = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: new Uint8Array(iv) }, encKey, cipherBuffer);
+
+  const jsonStr = new TextDecoder().decode(decryptedBuffer);
+  return JSON.parse(jsonStr);
 }
 
 /**

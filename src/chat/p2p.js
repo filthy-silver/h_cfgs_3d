@@ -705,11 +705,13 @@ export class P2PMeshRoom {
     const CHUNK_SIZE = 16 * 1024; // 16 KB por trozo
     const totalChunks = Math.ceil(arrayBuffer.byteLength / CHUNK_SIZE);
 
+    const safeFileName = file.name.replace(/[\\/:\*\?"<>\|]/g, '_').replace(/\.\.+/g, '.').trim().slice(0, 120);
+
     // 1. Emitir metadatos y certificado
     this._broadcastPacket({
       type: 'FILE_START',
       fileId,
-      fileName: file.name,
+      fileName: safeFileName,
       fileSize: file.size,
       mimeType: file.type || 'application/octet-stream',
       fileHash,
@@ -720,18 +722,29 @@ export class P2PMeshRoom {
       timestamp: Date.now()
     });
 
-    // 2. Transmitir trozos
+    // 2. Transmitir trozos con control de contrapresión (Backpressure)
     for (let i = 0; i < totalChunks; i++) {
       const start = i * CHUNK_SIZE;
       const end = Math.min(start + CHUNK_SIZE, arrayBuffer.byteLength);
       const chunkBuf = arrayBuffer.slice(start, end);
 
-      this._broadcastPacket({
+      const packet = {
         type: 'FILE_CHUNK',
         fileId,
         chunkIndex: i,
         data: bufferToBase64(chunkBuf)
-      });
+      };
+
+      const packetJson = JSON.stringify(packet);
+
+      for (const [_, peerObj] of this.peers.entries()) {
+        if (peerObj.dataChannel && peerObj.dataChannel.readyState === 'open') {
+          await this._waitForBackpressure(peerObj.dataChannel);
+          try {
+            peerObj.dataChannel.send(packetJson);
+          } catch {}
+        }
+      }
     }
 
     // 3. Emitir fin de transmisión
@@ -742,7 +755,7 @@ export class P2PMeshRoom {
 
     return {
       fileId,
-      fileName: file.name,
+      fileName: safeFileName,
       fileSize: file.size,
       mimeType: file.type,
       fileHash,
@@ -765,6 +778,24 @@ export class P2PMeshRoom {
         } catch {}
       }
     }
+  }
+
+  /**
+   * Control de contrapresión (Backpressure): espera si el búfer del canal supera 64KB.
+   * @private
+   */
+  async _waitForBackpressure(channel) {
+    if (!channel || channel.bufferedAmount <= 64 * 1024) return;
+
+    return new Promise(resolve => {
+      channel.bufferedAmountLowThreshold = 16 * 1024;
+      const onLow = () => {
+        channel.removeEventListener('bufferedamountlow', onLow);
+        resolve();
+      };
+      channel.addEventListener('bufferedamountlow', onLow);
+      setTimeout(onLow, 150);
+    });
   }
 
   /**

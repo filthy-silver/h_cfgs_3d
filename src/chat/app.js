@@ -20,6 +20,8 @@ import {
   computeFileHash
 } from './crypto.js';
 
+import { escapeHtml } from '../domain/sanitizer.js';
+
 import {
   loadStoredIdentity,
   saveStoredIdentity,
@@ -1019,16 +1021,6 @@ function formatBytes(bytes) {
   const sizes = ['B', 'KB', 'MB', 'GB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
-}
-
-function escapeHtml(str) {
-  if (!str) return '';
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
 }
 
 /**

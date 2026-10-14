@@ -283,40 +283,60 @@ export async function onRequest(context) {
         });
       }
 
-      // ACCIÓN C: Revocación en cascada (Admin / Moderador)
+      // ACCIÓN C: Revocación en cascada multi-nivel (Admin / Moderador)
       if (action === 'revoke_cascade') {
         const { targetFingerprint } = body;
-        const targetFp = String(targetFingerprint || '').trim().toLowerCase();
+        const rootTargetFp = String(targetFingerprint || '').trim().toLowerCase();
 
-        // Expulsamos al usuario diana
-        const targetUserKey = `user_meta_${targetFp}`;
-        const targetUser = await getKv(env, targetUserKey);
-        if (targetUser) {
-          targetUser.banned = true;
-          await setKv(env, targetUserKey, targetUser);
+        if (!rootTargetFp) {
+          return new Response(JSON.stringify({ success: false, error: 'Huella objetivo requerida' }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
+          });
         }
 
-        // Buscamos todas las invitaciones emitidas por él y suspendemos a sus invitados
-        const issuedKey = `issued_by_${targetFp}`;
-        const issuedCodes = (await getKv(env, issuedKey)) || [];
+        // Algoritmo BFS para recorrer y suspender el subárbol completo (A -> B -> C...)
+        const queue = [rootTargetFp];
+        const visited = new Set([rootTargetFp]);
         const affectedUsers = [];
 
-        for (const code of issuedCodes) {
-          const inv = await getKv(env, `inv_${code}`);
-          if (inv && inv.used && inv.usedByFingerprint) {
-            const childFp = inv.usedByFingerprint;
-            const childUser = await getKv(env, `user_meta_${childFp}`);
-            if (childUser) {
-              childUser.banned = true;
-              await setKv(env, `user_meta_${childFp}`, childUser);
-              affectedUsers.push(childFp);
+        while (queue.length > 0) {
+          const currentFp = queue.shift();
+
+          // Suspender usuario actual
+          const currentKey = `user_meta_${currentFp}`;
+          const currentUser = await getKv(env, currentKey);
+          if (currentUser) {
+            currentUser.banned = true;
+            await setKv(env, currentKey, currentUser);
+            if (currentFp !== rootTargetFp) {
+              affectedUsers.push(currentFp);
+            }
+          }
+
+          // Buscar todas las invitaciones emitidas por este nodo
+          const issuedCodes = (await getKv(env, `issued_by_${currentFp}`)) || [];
+          for (const code of issuedCodes) {
+            const inv = await getKv(env, `inv_${code}`);
+            if (inv) {
+              inv.revoked = true;
+              await setKv(env, `inv_${code}`, inv);
+
+              if (inv.used && inv.usedByFingerprint) {
+                const childFp = inv.usedByFingerprint.toLowerCase();
+                if (!visited.has(childFp)) {
+                  visited.add(childFp);
+                  queue.push(childFp);
+                }
+              }
             }
           }
         }
 
         return new Response(JSON.stringify({
           success: true,
-          message: `Usuario ${targetFp} y ${affectedUsers.length} descendientes suspendidos en cascada.`,
+          message: `Usuario ${rootTargetFp} y ${affectedUsers.length} descendiente(s) suspendidos en cascada.`,
+          rootTarget: rootTargetFp,
           affectedUsers
         }), {
           status: 200,

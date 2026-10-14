@@ -17,7 +17,10 @@ import {
   bytesToMnemonic,
   mnemonicToBytes,
   bufferToHex,
-  hexToBuffer
+  hexToBuffer,
+  canonicalJsonString,
+  encryptPrivateKeyWithMnemonic,
+  decryptPrivateKeyWithMnemonic
 } from '../src/chat/crypto.js';
 
 describe('chat/crypto.js · Motor Criptográfico Autosoberano', () => {
@@ -161,6 +164,45 @@ describe('chat/crypto.js · Motor Criptográfico Autosoberano', () => {
 
     const isValid = await verifyPayload(publicSpki, actionPayload, signature);
     assert.equal(isValid, true);
+  });
+
+  it('produce JSON canónico idéntico independientemente del orden de inserción de claves', () => {
+    const objA = { z: 1, a: 2, m: { y: 'hola', x: 'mundo' } };
+    const objB = { a: 2, m: { x: 'mundo', y: 'hola' }, z: 1 };
+
+    const canonA = canonicalJsonString(objA);
+    const canonB = canonicalJsonString(objB);
+
+    assert.equal(canonA, canonB);
+    assert.equal(canonA, '{"a":2,"m":{"x":"mundo","y":"hola"},"z":1}');
+  });
+
+  it('cifra y descifra la clave privada JWK usando las 12 palabras mnemónicas (Bóveda Criptográfica)', async () => {
+    const keyPair = await generateIdentityKeyPair();
+    const { privateJwk } = await exportKeyPair(keyPair);
+
+    const testMnemonic = 'aguila cosmos bosque brisa cedro cielo diamante eco faro fuego galaxia hielo';
+    const vault = await encryptPrivateKeyWithMnemonic(privateJwk, testMnemonic);
+
+    assert.ok(vault.ciphertext);
+    assert.ok(vault.iv);
+
+    const decryptedJwk = await decryptPrivateKeyWithMnemonic(vault.ciphertext, vault.iv, testMnemonic);
+    assert.deepEqual(decryptedJwk, privateJwk);
+  });
+
+  it('falla el descifrado de la clave privada si se usa una frase mnemónica incorrecta', async () => {
+    const keyPair = await generateIdentityKeyPair();
+    const { privateJwk } = await exportKeyPair(keyPair);
+
+    const realMnemonic = 'aguila cosmos bosque brisa cedro cielo diamante eco faro fuego galaxia hielo';
+    const wrongMnemonic = 'ancla arena astro atlas aurora bahia barco barro base bisonte buho cabo';
+
+    const vault = await encryptPrivateKeyWithMnemonic(privateJwk, realMnemonic);
+
+    await assert.rejects(async () => {
+      await decryptPrivateKeyWithMnemonic(vault.ciphertext, vault.iv, wrongMnemonic);
+    });
   });
 
 });
