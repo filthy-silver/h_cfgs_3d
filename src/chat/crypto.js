@@ -556,4 +556,150 @@ export async function verifyFileAuthorshipCertificate(certificate, expectedFileH
   }
 }
 
+/**
+ * Huella digital (Fingerprint) predeterminada del Administrador Raíz Génesis de filthysilver.net.
+ */
+export const GENESIS_ADMIN_ROOT_FINGERPRINT = 'f117b055';
+
+/**
+ * Crea un Certificado Criptográfico de Delegación de Moderación firmado por el Administrador Raíz.
+ * Permite delegar facultades de expulsión o borrado a un estudiante o profesor sin exponer la clave raíz.
+ * @param {CryptoKey} rootPrivateKey - Clave privada del administrador raíz
+ * @param {string} rootPublicSpki - Clave pública SPKI del administrador raíz
+ * @param {string} moderatorPublicSpki - Clave pública SPKI del moderador delegado
+ * @param {string} [roomId='*'] - Sala autorizada ('*' para todas las salas)
+ * @param {string[]} [permissions=['KICK', 'DELETE_MESSAGE']] - Permisos otorgados
+ * @param {number} [validHours=72] - Horas de validez del certificado
+ * @returns {Promise<{ certificatePayload: Object, signature: string }>}
+ */
+export async function createModeratorCertificate(
+  rootPrivateKey,
+  rootPublicSpki,
+  moderatorPublicSpki,
+  roomId = '*',
+  permissions = ['KICK', 'DELETE_MESSAGE'],
+  validHours = 72
+) {
+  const rootFingerprint = await getFingerprint(rootPublicSpki);
+  const moderatorFingerprint = await getFingerprint(moderatorPublicSpki);
+  const now = Date.now();
+  const expiresAt = now + (validHours * 60 * 60 * 1000);
+
+  const certificatePayload = {
+    type: 'MODERATOR_DELEGATION',
+    rootFingerprint,
+    rootPublicSpki,
+    moderatorFingerprint,
+    moderatorPublicSpki,
+    roomId,
+    permissions,
+    issuedAt: now,
+    expiresAt
+  };
+
+  const signature = await signPayload(rootPrivateKey, certificatePayload);
+  return {
+    certificatePayload,
+    signature
+  };
+}
+
+/**
+ * Valida un Certificado de Delegación de Moderador contra una lista de claves raíz de confianza.
+ * @param {Object} certificate - Objeto con certificatePayload y signature
+ * @param {string[]} [trustedRootFingerprints=[]] - Lista de fingerprints de administradores raíz autorizados
+ * @returns {Promise<{ valid: boolean, payload?: Object, error?: string }>}
+ */
+export async function verifyModeratorCertificate(certificate, trustedRootFingerprints = []) {
+  try {
+    if (!certificate || !certificate.certificatePayload || !certificate.signature) {
+      return { valid: false, error: 'Estructura del certificado de moderador incompleta' };
+    }
+
+    const { certificatePayload, signature } = certificate;
+    if (certificatePayload.type !== 'MODERATOR_DELEGATION') {
+      return { valid: false, error: 'Tipo de certificado no válido' };
+    }
+
+    if (Date.now() > certificatePayload.expiresAt) {
+      return { valid: false, error: 'Certificado de moderador expirado' };
+    }
+
+    const computedRootFp = await getFingerprint(certificatePayload.rootPublicSpki);
+    if (computedRootFp !== certificatePayload.rootFingerprint) {
+      return { valid: false, error: 'La huella del emisor raíz no coincide con su clave SPKI' };
+    }
+
+    if (trustedRootFingerprints && trustedRootFingerprints.length > 0) {
+      if (!trustedRootFingerprints.includes(certificatePayload.rootFingerprint)) {
+        return { valid: false, error: 'El emisor raíz no está en la lista de administradores de confianza' };
+      }
+    }
+
+    const isValidSignature = await verifyPayload(certificatePayload.rootPublicSpki, certificatePayload, signature);
+    if (!isValidSignature) {
+      return { valid: false, error: 'Firma de la clave raíz inválida' };
+    }
+
+    return { valid: true, payload: certificatePayload };
+  } catch (err) {
+    return { valid: false, error: err.message };
+  }
+}
+
+/**
+ * Determina si una clave SPKI tiene autoridad legítima de moderación para una sala y acción dada,
+ * ya sea por ser Administrador Raíz directo o mediante un Certificado de Delegación válido.
+ * @param {string} actorSpki - Clave pública SPKI del usuario que ejecuta la acción
+ * @param {string} roomId - Identificador de la sala
+ * @param {'KICK'|'DELETE_MESSAGE'} requiredPermission - Permiso requerido
+ * @param {string[]} trustedRootFingerprints - Huellas de administradores raíz
+ * @param {Object} [moderatorCertificate=null] - Certificado de delegación opcional
+ * @returns {Promise<{ authorized: boolean, role: 'root'|'delegated'|'none', reason?: string }>}
+ */
+export async function isAuthorizedModerator(
+  actorSpki,
+  roomId,
+  requiredPermission,
+  trustedRootFingerprints = [],
+  moderatorCertificate = null
+) {
+  if (!actorSpki) {
+    return { authorized: false, role: 'none', reason: 'Falta la clave pública del autor' };
+  }
+
+  const actorFingerprint = await getFingerprint(actorSpki);
+
+  // 1. Verificar si es Administrador Raíz directo
+  if (trustedRootFingerprints.includes(actorFingerprint)) {
+    return { authorized: true, role: 'root' };
+  }
+
+  // 2. Si no es raíz, verificar si tiene Certificado de Delegación válido firmado por una raíz
+  if (moderatorCertificate) {
+    const certResult = await verifyModeratorCertificate(moderatorCertificate, trustedRootFingerprints);
+    if (!certResult.valid) {
+      return { authorized: false, role: 'none', reason: `Certificado inválido: ${certResult.error}` };
+    }
+
+    const payload = certResult.payload;
+    if (payload.moderatorSpki !== actorSpki) {
+      return { authorized: false, role: 'none', reason: 'El certificado no corresponde a este moderador' };
+    }
+
+    if (payload.roomId !== '*' && payload.roomId !== roomId) {
+      return { authorized: false, role: 'none', reason: `Certificado no válido para la sala ${roomId}` };
+    }
+
+    if (!payload.permissions.includes(requiredPermission)) {
+      return { authorized: false, role: 'none', reason: `Permiso ${requiredPermission} no concedido` };
+    }
+
+    return { authorized: true, role: 'delegated' };
+  }
+
+  return { authorized: false, role: 'none', reason: 'Usuario no autorizado para moderar' };
+}
+
+
 

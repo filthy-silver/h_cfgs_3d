@@ -20,7 +20,11 @@ import {
   hexToBuffer,
   canonicalJsonString,
   encryptPrivateKeyWithMnemonic,
-  decryptPrivateKeyWithMnemonic
+  decryptPrivateKeyWithMnemonic,
+  createModeratorCertificate,
+  verifyModeratorCertificate,
+  isAuthorizedModerator,
+  GENESIS_ADMIN_ROOT_FINGERPRINT
 } from '../src/chat/crypto.js';
 
 describe('chat/crypto.js · Motor Criptográfico Autosoberano', () => {
@@ -203,6 +207,121 @@ describe('chat/crypto.js · Motor Criptográfico Autosoberano', () => {
     await assert.rejects(async () => {
       await decryptPrivateKeyWithMnemonic(vault.ciphertext, vault.iv, wrongMnemonic);
     });
+  });
+
+  it('emite y valida exitosamente un Certificado de Delegación de Moderador firmado por la raíz', async () => {
+    const rootKey = await generateIdentityKeyPair();
+    const { publicSpki: rootSpki } = await exportKeyPair(rootKey);
+    const rootFp = await getFingerprint(rootSpki);
+
+    const modKey = await generateIdentityKeyPair();
+    const { publicSpki: modSpki } = await exportKeyPair(modKey);
+    const modFp = await getFingerprint(modSpki);
+
+    const cert = await createModeratorCertificate(
+      rootKey.privateKey,
+      rootSpki,
+      modSpki,
+      'general',
+      ['KICK', 'DELETE_MESSAGE'],
+      24
+    );
+
+    assert.ok(cert.signature);
+    assert.equal(cert.certificatePayload.rootFingerprint, rootFp);
+    assert.equal(cert.certificatePayload.moderatorFingerprint, modFp);
+
+    const verifyRes = await verifyModeratorCertificate(cert, [rootFp]);
+    assert.equal(verifyRes.valid, true);
+    assert.equal(verifyRes.payload.moderatorFingerprint, modFp);
+  });
+
+  it('rechaza certificados de moderador si han expirado o fueron emitidos por una raíz no autorizada', async () => {
+    const rootKey = await generateIdentityKeyPair();
+    const { publicSpki: rootSpki } = await exportKeyPair(rootKey);
+    const rootFp = await getFingerprint(rootSpki);
+
+    const modKey = await generateIdentityKeyPair();
+    const { publicSpki: modSpki } = await exportKeyPair(modKey);
+
+    // Certificado expirado (-1 hora)
+    const expiredCert = await createModeratorCertificate(
+      rootKey.privateKey,
+      rootSpki,
+      modSpki,
+      '*',
+      ['KICK'],
+      -1
+    );
+
+    const expiredRes = await verifyModeratorCertificate(expiredCert, [rootFp]);
+    assert.equal(expiredRes.valid, false);
+    assert.match(expiredRes.error, /expirado/i);
+
+    // Certificado firmado por raíz desconocida
+    const validCert = await createModeratorCertificate(
+      rootKey.privateKey,
+      rootSpki,
+      modSpki,
+      '*',
+      ['KICK'],
+      24
+    );
+    const unknownRootRes = await verifyModeratorCertificate(validCert, ['otra_raiz_invalida']);
+    assert.equal(unknownRootRes.valid, false);
+    assert.match(unknownRootRes.error, /no está en la lista de administradores/i);
+  });
+
+  it('valida autorizaciones con isAuthorizedModerator y previene la usurpación de moderador', async () => {
+    const rootKey = await generateIdentityKeyPair();
+    const { publicSpki: rootSpki } = await exportKeyPair(rootKey);
+    const rootFp = await getFingerprint(rootSpki);
+
+    const modKey = await generateIdentityKeyPair();
+    const { publicSpki: modSpki } = await exportKeyPair(modKey);
+
+    const attackerKey = await generateIdentityKeyPair();
+    const { publicSpki: attackerSpki } = await exportKeyPair(attackerKey);
+
+    // 1. El Administrador Raíz siempre está autorizado
+    const rootAuth = await isAuthorizedModerator(rootSpki, 'general', 'KICK', [rootFp]);
+    assert.equal(rootAuth.authorized, true);
+    assert.equal(rootAuth.role, 'root');
+
+    // 2. Un atacante sin certificado es rechazado
+    const attackerAuth = await isAuthorizedModerator(attackerSpki, 'general', 'KICK', [rootFp]);
+    assert.equal(attackerAuth.authorized, false);
+    assert.equal(attackerAuth.role, 'none');
+
+    // 3. Moderador delegado con certificado válido solo para DELETE_MESSAGE en sala 'general'
+    const modCert = await createModeratorCertificate(
+      rootKey.privateKey,
+      rootSpki,
+      modSpki,
+      'general',
+      ['DELETE_MESSAGE'],
+      48
+    );
+
+    // Autorizado para DELETE_MESSAGE en 'general'
+    const modAuthOk = await isAuthorizedModerator(modSpki, 'general', 'DELETE_MESSAGE', [rootFp], modCert);
+    assert.equal(modAuthOk.authorized, true);
+    assert.equal(modAuthOk.role, 'delegated');
+
+    // Rechazado si intenta KICK (permiso no concedido en el certificado)
+    const modAuthKick = await isAuthorizedModerator(modSpki, 'general', 'KICK', [rootFp], modCert);
+    assert.equal(modAuthKick.authorized, false);
+    assert.match(modAuthKick.reason, /permiso KICK no concedido/i);
+
+    // Rechazado si intenta actuar en una sala diferente ('ocio-gaming')
+    const modAuthRoom = await isAuthorizedModerator(modSpki, 'ocio-gaming', 'DELETE_MESSAGE', [rootFp], modCert);
+    assert.equal(modAuthRoom.authorized, false);
+    assert.match(modAuthRoom.reason, /no válido para la sala/i);
+
+    // Rechazado si un atacante intenta presentar el certificado del moderador legítimo
+    const stolenCertAuth = await isAuthorizedModerator(attackerSpki, 'general', 'DELETE_MESSAGE', [rootFp], modCert);
+    assert.equal(stolenCertAuth.authorized, false);
+    assert.match(stolenCertAuth.reason, /no corresponde a este moderador/i);
   });
 
 });

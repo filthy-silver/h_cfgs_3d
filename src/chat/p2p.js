@@ -10,6 +10,11 @@ import {
   computeFileHash,
   createFileAuthorshipCertificate,
   verifyFileAuthorshipCertificate,
+  createModeratorCertificate,
+  verifyModeratorCertificate,
+  isAuthorizedModerator,
+  getFingerprint,
+  GENESIS_ADMIN_ROOT_FINGERPRINT,
   bufferToBase64,
   base64ToBuffer
 } from './crypto.js';
@@ -34,6 +39,8 @@ export class P2PMeshRoom {
    * @param {Object} options
    * @param {string} options.roomId - Identificador de la sala
    * @param {Object} options.identity - Perfil del usuario local (fingerprint, nickname, publicSpki, privateKey)
+   * @param {string[]} [options.trustedAdminFingerprints] - Huellas autorizadas de Administradores Raíz
+   * @param {Object} [options.moderatorCertificate] - Certificado de delegación de moderación opcional
    * @param {Function} [options.onPeerJoin] - Callback cuando entra un compañero
    * @param {Function} [options.onPeerLeave] - Callback cuando sale un compañero
    * @param {Function} [options.onMessage] - Callback al recibir mensaje
@@ -46,6 +53,8 @@ export class P2PMeshRoom {
     this.roomId = options.roomId;
     this.identity = options.identity;
     this.peerId = options.identity.fingerprint;
+    this.trustedAdminFingerprints = options.trustedAdminFingerprints || [GENESIS_ADMIN_ROOT_FINGERPRINT];
+    this.moderatorCertificate = options.moderatorCertificate || null;
 
     this.onPeerJoin = options.onPeerJoin || (() => {});
     this.onPeerLeave = options.onPeerLeave || (() => {});
@@ -60,11 +69,24 @@ export class P2PMeshRoom {
     // Mapa de compañeros: peerId -> { peerConnection, dataChannel, profile }
     this.peers = new Map();
     this.peerMessageTimestamps = new Map(); // Para control anti-spam / rate-limiting
-    this.incomingFileTransfers = new Map(); // fileId -> { meta, chunks }
+    this.incomingFileTransfers = new Map(); // fileId -> { meta, receivedChunks, totalChunks, fileHash, lastActivity }
+
+    // Limpieza periódica de transferencias incompletas huérfanas (TTL de 60 segundos)
+    this._transferCleanupInterval = setInterval(() => {
+      const now = Date.now();
+      for (const [fileId, transfer] of this.incomingFileTransfers.entries()) {
+        if (now - (transfer.lastActivity || 0) > 60000) {
+          console.warn(`[P2P FileDrop] Descartando transferencia huérfana por inactividad: ${fileId}`);
+          transfer.receivedChunks?.clear();
+          this.incomingFileTransfers.delete(fileId);
+        }
+      }
+    }, 30000);
 
     // Soporte para pruebas locales instantáneas entre pestañas (BroadcastChannel nativo)
     this.broadcastChannel = null;
     this.nostrSockets = [];
+    this._nostrReconnectTimers = new Map();
     this.isDestroyed = false;
 
     this._initSignaling();
@@ -95,6 +117,7 @@ export class P2PMeshRoom {
       from: this.peerId,
       publicSpki: this.identity.publicSpki,
       nickname: this.identity.nickname,
+      moderatorCertificate: this.moderatorCertificate,
       timestamp: Date.now()
     });
 
@@ -115,36 +138,68 @@ export class P2PMeshRoom {
    */
   _initNostrSignaling() {
     for (const relayUrl of NOSTR_RELAYS) {
-      try {
-        const ws = new WebSocket(relayUrl);
-        this.nostrSockets.push(ws);
+      this._connectNostrRelay(relayUrl, 0);
+    }
+  }
 
-        ws.onopen = () => {
-          // Suscribirse a eventos efímeros (kind 20000) etiquetados con el roomId
-          const subId = `sub_${this.roomId}_${this.peerId}`;
-          const filter = {
-            kinds: [20000],
-            '#d': [this.roomId],
-            since: Math.floor(Date.now() / 1000) - 30
-          };
-          ws.send(JSON.stringify(['REQ', subId, filter]));
+  /**
+   * Establece conexión individual con un relay Nostr con reintento y backoff exponencial.
+   * @private
+   */
+  _connectNostrRelay(relayUrl, retryAttempt = 0) {
+    if (this.isDestroyed) return;
+
+    try {
+      const ws = new WebSocket(relayUrl);
+      this.nostrSockets.push(ws);
+
+      ws.onopen = () => {
+        // Suscribirse a eventos efímeros (kind 20000) etiquetados con el roomId
+        const subId = `sub_${this.roomId}_${this.peerId}`;
+        const filter = {
+          kinds: [20000],
+          '#d': [this.roomId],
+          since: Math.floor(Date.now() / 1000) - 30
         };
+        ws.send(JSON.stringify(['REQ', subId, filter]));
+      };
 
-        ws.onmessage = (msgEvent) => {
-          try {
-            const data = JSON.parse(msgEvent.data);
-            if (data[0] === 'EVENT' && data[2] && data[2].content) {
-              const signal = JSON.parse(data[2].content);
-              this._handleSignal(signal);
-            }
-          } catch {
-            // Ignorar mensajes no compatibles
+      ws.onmessage = (msgEvent) => {
+        try {
+          const data = JSON.parse(msgEvent.data);
+          if (data[0] === 'EVENT' && data[2] && data[2].content) {
+            const signal = JSON.parse(data[2].content);
+            this._handleSignal(signal);
           }
-        };
+        } catch {
+          // Ignorar mensajes no compatibles
+        }
+      };
 
-        ws.onerror = () => {};
-      } catch (e) {
-        console.warn(`[P2P] Error conectando a relay ${relayUrl}:`, e);
+      ws.onclose = () => {
+        this.nostrSockets = this.nostrSockets.filter(s => s !== ws);
+        if (!this.isDestroyed) {
+          const delay = Math.min(1000 * Math.pow(2, retryAttempt), 30000);
+          const timer = setTimeout(() => {
+            this._nostrReconnectTimers.delete(relayUrl);
+            this._connectNostrRelay(relayUrl, retryAttempt + 1);
+          }, delay);
+          this._nostrReconnectTimers.set(relayUrl, timer);
+        }
+      };
+
+      ws.onerror = () => {
+        try { ws.close(); } catch {}
+      };
+    } catch (e) {
+      console.warn(`[P2P] Error conectando a relay ${relayUrl}:`, e);
+      if (!this.isDestroyed) {
+        const delay = Math.min(2000 * Math.pow(2, retryAttempt), 30000);
+        const timer = setTimeout(() => {
+          this._nostrReconnectTimers.delete(relayUrl);
+          this._connectNostrRelay(relayUrl, retryAttempt + 1);
+        }, delay);
+        this._nostrReconnectTimers.set(relayUrl, timer);
       }
     }
   }
@@ -358,11 +413,12 @@ export class P2PMeshRoom {
       this.onStatusChange('connected', `Conectado con ${this.peers.size} compañero(s)`);
       if (peerObj) {
         this.onPeerJoin(peerObj.profile);
-        // Le enviamos nuestro perfil actualizado inmediatamente
+        // Le enviamos nuestro perfil actualizado inmediatamente (con credencial de moderador si existe)
         this._sendDirect(channel, {
           type: 'HELLO_HANDSHAKE',
           nickname: this.identity.nickname,
-          publicSpki: this.identity.publicSpki
+          publicSpki: this.identity.publicSpki,
+          moderatorCertificate: this.moderatorCertificate
         });
       }
     };
@@ -443,13 +499,28 @@ export class P2PMeshRoom {
       return;
     }
 
-    // 2. Notificación de actualización de perfil/apodo
+    // 2. Notificación de actualización de perfil/apodo y Handshake de Moderador
     if (packet.type === 'PROFILE_UPDATE' || packet.type === 'HELLO_HANDSHAKE') {
       if (peerObj) {
         const oldName = peerObj.profile.nickname;
         peerObj.profile.nickname = packet.nickname || oldName;
         if (packet.publicSpki) {
           peerObj.profile.publicSpki = packet.publicSpki;
+          const fp = await getFingerprint(packet.publicSpki);
+
+          // Verificar si es Administrador Raíz directo
+          if (this.trustedAdminFingerprints.includes(fp)) {
+            peerObj.profile.isModerator = true;
+            peerObj.profile.moderatorRole = 'root';
+          } else if (packet.moderatorCertificate) {
+            // Verificar si presenta un Certificado de Delegación válido
+            const certCheck = await verifyModeratorCertificate(packet.moderatorCertificate, this.trustedAdminFingerprints);
+            if (certCheck.valid && certCheck.payload.moderatorSpki === packet.publicSpki) {
+              peerObj.profile.isModerator = true;
+              peerObj.profile.moderatorRole = 'delegated';
+              peerObj.profile.moderatorCertificate = packet.moderatorCertificate;
+            }
+          }
         }
         this.onProfileUpdate(peerObj.profile, oldName);
       }
@@ -458,7 +529,22 @@ export class P2PMeshRoom {
 
     // 3. Orden administrativa de borrado de mensaje
     if (packet.type === 'ADMIN_DELETE_MESSAGE') {
-      const { messageId, adminSpki, signature, timestamp } = packet;
+      const { messageId, adminSpki, signature, timestamp, moderatorCertificate } = packet;
+
+      // 1. Verificar autorización legítima de moderador (Raíz o Delegado)
+      const auth = await isAuthorizedModerator(
+        adminSpki,
+        this.roomId,
+        'DELETE_MESSAGE',
+        this.trustedAdminFingerprints,
+        moderatorCertificate
+      );
+      if (!auth.authorized) {
+        console.warn(`[P2P Moderation Security] Intento no autorizado de borrado de mensaje: ${auth.reason}`);
+        return;
+      }
+
+      // 2. Verificar firma del payload de acción
       const isValid = await verifyPayload(adminSpki, { type: 'ADMIN_DELETE_MESSAGE', messageId, timestamp }, signature);
       if (isValid) {
         this.onMessageDeleted(messageId);
@@ -468,7 +554,22 @@ export class P2PMeshRoom {
 
     // 4. Orden administrativa de expulsión de sala (KICK)
     if (packet.type === 'ADMIN_KICK') {
-      const { targetPeerId, reason, adminSpki, signature, timestamp } = packet;
+      const { targetPeerId, reason, adminSpki, signature, timestamp, moderatorCertificate } = packet;
+
+      // 1. Verificar autorización legítima de moderador (Raíz o Delegado)
+      const auth = await isAuthorizedModerator(
+        adminSpki,
+        this.roomId,
+        'KICK',
+        this.trustedAdminFingerprints,
+        moderatorCertificate
+      );
+      if (!auth.authorized) {
+        console.warn(`[P2P Moderation Security] Intento no autorizado de expulsión (KICK): ${auth.reason}`);
+        return;
+      }
+
+      // 2. Verificar firma de la orden de expulsión
       const isValid = await verifyPayload(adminSpki, { type: 'ADMIN_KICK', targetPeerId, reason, timestamp }, signature);
       if (isValid) {
         if (targetPeerId === this.peerId) {
@@ -487,7 +588,8 @@ export class P2PMeshRoom {
         meta: packet,
         receivedChunks: new Map(),
         totalChunks: packet.totalChunks,
-        fileHash: packet.fileHash
+        fileHash: packet.fileHash,
+        lastActivity: Date.now()
       });
       return;
     }
@@ -496,6 +598,7 @@ export class P2PMeshRoom {
       const transfer = this.incomingFileTransfers.get(packet.fileId);
       if (transfer) {
         transfer.receivedChunks.set(packet.chunkIndex, base64ToBuffer(packet.data));
+        transfer.lastActivity = Date.now();
         this.onFileProgress(packet.fileId, transfer.receivedChunks.size / transfer.totalChunks);
       }
       return;
@@ -504,20 +607,19 @@ export class P2PMeshRoom {
     if (packet.type === 'FILE_END') {
       const transfer = this.incomingFileTransfers.get(packet.fileId);
       if (transfer && transfer.receivedChunks.size === transfer.totalChunks) {
-        let totalLen = 0;
+        // En vez de un Uint8Array contiguo gigante que duplica el consumo de RAM en archivos 3D,
+        // pasamos el array de ArrayBuffers directamente a Blob
+        const chunks = [];
         for (let i = 0; i < transfer.totalChunks; i++) {
-          totalLen += transfer.receivedChunks.get(i).byteLength;
+          chunks.push(transfer.receivedChunks.get(i));
         }
 
-        const assembled = new Uint8Array(totalLen);
-        let offset = 0;
-        for (let i = 0; i < transfer.totalChunks; i++) {
-          const chunkBuf = new Uint8Array(transfer.receivedChunks.get(i));
-          assembled.set(chunkBuf, offset);
-          offset += chunkBuf.byteLength;
-        }
+        const blob = new Blob(chunks, { type: transfer.meta.mimeType || 'application/octet-stream' });
+        // Liberar mapa de fragmentos inmediatamente para aliviar el heap
+        transfer.receivedChunks.clear();
 
-        const actualHash = await computeFileHash(assembled.buffer);
+        const arrayBuffer = await blob.arrayBuffer();
+        const actualHash = await computeFileHash(arrayBuffer);
         const isValidHash = (actualHash === transfer.meta.fileHash);
 
         let authorshipInfo = { valid: false };
@@ -525,7 +627,6 @@ export class P2PMeshRoom {
           authorshipInfo = await verifyFileAuthorshipCertificate(transfer.meta.authorshipCertificate, transfer.meta.fileHash);
         }
 
-        const blob = new Blob([assembled.buffer], { type: transfer.meta.mimeType || 'application/octet-stream' });
         const blobUrl = URL.createObjectURL(blob);
 
         this.onFileReceived({
@@ -655,7 +756,8 @@ export class P2PMeshRoom {
       messageId,
       adminSpki: adminPublicSpki,
       signature,
-      timestamp
+      timestamp,
+      moderatorCertificate: this.moderatorCertificate
     };
     this._broadcastPacket(packet);
     this.onMessageDeleted(messageId);
@@ -677,7 +779,8 @@ export class P2PMeshRoom {
       reason,
       adminSpki: adminPublicSpki,
       signature,
-      timestamp
+      timestamp,
+      moderatorCertificate: this.moderatorCertificate
     };
     this._broadcastPacket(packet);
     this._handlePeerDisconnected(targetPeerId);
@@ -815,6 +918,21 @@ export class P2PMeshRoom {
    */
   destroy() {
     this.isDestroyed = true;
+
+    if (this._transferCleanupInterval) {
+      clearInterval(this._transferCleanupInterval);
+      this._transferCleanupInterval = null;
+    }
+
+    for (const [_, timer] of this._nostrReconnectTimers.entries()) {
+      clearTimeout(timer);
+    }
+    this._nostrReconnectTimers.clear();
+
+    for (const [_, transfer] of this.incomingFileTransfers.entries()) {
+      transfer.receivedChunks?.clear();
+    }
+    this.incomingFileTransfers.clear();
 
     if (this.broadcastChannel) {
       try {

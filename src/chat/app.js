@@ -17,7 +17,9 @@ import {
   mnemonicToBytes,
   generateInviteToken,
   verifyInviteToken,
-  computeFileHash
+  computeFileHash,
+  verifyModeratorCertificate,
+  GENESIS_ADMIN_ROOT_FINGERPRINT
 } from './crypto.js';
 
 import { escapeHtml } from '../domain/sanitizer.js';
@@ -50,6 +52,13 @@ const state = {
   roomInstance: null,
   peers: new Map(),  // peerId -> profile
   isAdmin: localStorage.getItem('p2p_chat_is_admin') === 'true',
+  moderatorCertificate: (() => {
+    try {
+      return JSON.parse(localStorage.getItem('p2p_chat_mod_cert') || 'null');
+    } catch {
+      return null;
+    }
+  })(),
   isKicked: false
 };
 
@@ -295,6 +304,7 @@ function joinRoom(roomId) {
   state.roomInstance = new P2PMeshRoom({
     roomId,
     identity: state.identity,
+    moderatorCertificate: state.moderatorCertificate,
     onStatusChange: (status, message) => {
       updateStatusUi(status, message);
     },
@@ -375,6 +385,7 @@ function updatePeersListUi() {
     pill.innerHTML = `
       <span class="peer-dot online"></span>
       <span class="peer-name" title="ID: 0x${peerId}">${escapeHtml(peer.nickname)}</span>
+      ${peer.isModerator ? `<span class="peer-badge-mod" title="Moderador Verificado Criptográficamente (${peer.moderatorRole})">🛡️</span>` : ''}
       ${state.isAdmin ? `<button type="button" class="btn-kick-peer" data-peer-id="${peerId}" title="Expulsar a este usuario">⛔</button>` : ''}
     `;
 
@@ -823,19 +834,46 @@ function bindEvents() {
   });
 
   // Alternar modo administrador
-  elements.btnToggleAdminMode?.addEventListener('click', () => {
+  elements.btnToggleAdminMode?.addEventListener('click', async () => {
     if (state.isAdmin) {
       state.isAdmin = false;
+      state.moderatorCertificate = null;
       localStorage.setItem('p2p_chat_is_admin', 'false');
+      localStorage.removeItem('p2p_chat_mod_cert');
+      if (state.roomInstance) {
+        state.roomInstance.moderatorCertificate = null;
+      }
       alert('Modo administrador desactivado.');
     } else {
-      const pass = prompt('Introduce la contraseña o código de moderación de filthysilver.net:');
-      if (pass === 'filthysilver3d' || pass === 'admin') {
+      const input = prompt('Introduce el Certificado JSON de Delegación de Moderador o la clave de moderación:');
+      if (!input) return;
+
+      const trimmed = input.trim();
+      if (trimmed.startsWith('{')) {
+        try {
+          const parsed = JSON.parse(trimmed);
+          const verifyResult = await verifyModeratorCertificate(parsed, [GENESIS_ADMIN_ROOT_FINGERPRINT]);
+          if (verifyResult.valid) {
+            state.isAdmin = true;
+            state.moderatorCertificate = parsed;
+            localStorage.setItem('p2p_chat_is_admin', 'true');
+            localStorage.setItem('p2p_chat_mod_cert', JSON.stringify(parsed));
+            if (state.roomInstance) {
+              state.roomInstance.moderatorCertificate = parsed;
+            }
+            alert(`🛡️ Certificado de moderador validado con éxito.\nExpira en: ${new Date(parsed.certificatePayload.expiresAt).toLocaleString()}`);
+          } else {
+            alert(`Certificado no válido: ${verifyResult.error}`);
+          }
+        } catch (e) {
+          alert(`Error al analizar el certificado JSON: ${e.message}`);
+        }
+      } else if (trimmed === 'filthysilver3d' || trimmed === 'admin') {
         state.isAdmin = true;
         localStorage.setItem('p2p_chat_is_admin', 'true');
-        alert('🛡️ Modo moderador activado.');
-      } else if (pass !== null) {
-        alert('Código incorrecto.');
+        alert('🛡️ Modo moderador activado (Clave Génesis).');
+      } else {
+        alert('Código o certificado incorrecto.');
       }
     }
     updateIdentityUi();
