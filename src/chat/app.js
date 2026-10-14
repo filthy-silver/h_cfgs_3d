@@ -19,7 +19,10 @@ import {
   verifyInviteToken,
   computeFileHash,
   verifyModeratorCertificate,
-  GENESIS_ADMIN_ROOT_FINGERPRINT
+  GENESIS_ADMIN_ROOT_FINGERPRINT,
+  signPayload,
+  encryptPrivateKeyWithMnemonic,
+  decryptPrivateKeyWithMnemonic
 } from './crypto.js';
 
 import { escapeHtml } from '../domain/sanitizer.js';
@@ -213,7 +216,44 @@ async function setupUserIdentity() {
     });
   }
 
+  // Sincronizar respaldo de la bóveda cifrada en Cloudflare (Zero-Knowledge)
+  backupUserVaultToCloudflare(state.identity);
+
   updateIdentityUi();
+}
+
+/**
+ * Sincroniza un respaldo de la Bóveda Criptográfica en Cloudflare KV (Zero-Knowledge).
+ * La clave privada se cifra con AES-GCM 256 derivado de las 12 palabras antes de enviarse.
+ */
+async function backupUserVaultToCloudflare(identity) {
+  if (!identity || !identity.mnemonic || !identity.privateJwk || !identity.privateKey) return;
+  try {
+    const vault = await encryptPrivateKeyWithMnemonic(identity.privateJwk, identity.mnemonic);
+    const encoder = new TextEncoder();
+    const seedHash = await computeFileHash(encoder.encode(identity.mnemonic.trim().toLowerCase()).buffer);
+    const timestamp = Date.now();
+    const signature = await signPayload(
+      identity.privateKey,
+      { action: 'backup_vault', fingerprint: identity.fingerprint, seedHash, timestamp }
+    );
+
+    await fetch('/api/chat/vault', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        fingerprint: identity.fingerprint,
+        publicSpki: identity.publicSpki,
+        seedHash,
+        vault,
+        nickname: identity.nickname,
+        timestamp,
+        signature
+      })
+    });
+  } catch (err) {
+    console.warn('[Vault] No se pudo sincronizar respaldo en Cloudflare:', err);
+  }
 }
 
 /**
@@ -492,13 +532,13 @@ function appendFileBubble(fileData, isMe = false) {
  */
 async function handleSendFile(file) {
   if (!file || !state.roomInstance) return;
-  appendSystemMessage(`⏳ Calculando SHA-256 y firmando certificado de autoría para "${file.name}"...`);
+  appendSystemMessage(`⏳ Calculando SHA-256 y firmando certificado de autoría para "${escapeHtml(file.name)}"...`);
 
   try {
     const sentMeta = await state.roomInstance.sendFile(file);
     appendFileBubble(sentMeta, true);
     appendRoomHistory(state.currentRoomId, { ...sentMeta, isFile: true, isMe: true });
-    appendSystemMessage(`✓ "${file.name}" transmitido por P2P con certificado de autoría.`);
+    appendSystemMessage(`✓ "${escapeHtml(file.name)}" transmitido por P2P con certificado de autoría.`);
   } catch (err) {
     alert(`Error enviando archivo: ${err.message}`);
   }
@@ -558,7 +598,7 @@ async function loadUserInviteTree() {
 }
 
 /**
- * Emite una nueva invitación consumiendo 1 del cupo del usuario.
+ * Emite una nueva invitación consumiendo 1 del cupo del usuario (con firma digital ECDSA).
  */
 async function createQuotaInvite() {
   const targetLabel = (elements.targetGuestInput?.value || '').trim();
@@ -568,14 +608,23 @@ async function createQuotaInvite() {
   }
 
   try {
+    const timestamp = Date.now();
+    const signature = await signPayload(
+      state.identity.privateKey,
+      { action: 'create', creatorFingerprint: state.identity.fingerprint, targetLabel, timestamp }
+    );
+
     const res = await fetch('/api/chat/invites', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         action: 'create',
         creatorFingerprint: state.identity.fingerprint,
+        creatorPublicSpki: state.identity.publicSpki,
         creatorLabel: state.identity.nickname,
-        targetLabel
+        targetLabel,
+        timestamp,
+        signature
       })
     });
 
@@ -933,23 +982,43 @@ function bindEvents() {
         }
       }
 
+      // 2. Si son 12 palabras, consultar y descifrar la Bóveda Zero-Knowledge desde Cloudflare
       mnemonicToBytes(inputStr);
-      const keyPair = await generateIdentityKeyPair();
-      const exported = await exportKeyPair(keyPair);
-      const fingerprint = await getFingerprint(exported.publicSpki);
-      const nickname = generateDefaultNickname(fingerprint);
+      const encoder = new TextEncoder();
+      const seedHash = await computeFileHash(encoder.encode(inputStr.trim().toLowerCase()).buffer);
 
-      const newIdentity = {
-        privateJwk: exported.privateJwk,
-        publicSpki: exported.publicSpki,
-        fingerprint,
-        nickname,
-        mnemonic: inputStr
-      };
+      appendSystemMessage('⏳ Consultando Bóveda Criptográfica en Cloudflare para restaurar identidad...');
 
-      saveStoredIdentity(newIdentity);
-      alert('¡Identidad restaurada con éxito!');
-      window.location.reload();
+      try {
+        const vaultRes = await fetch(`/api/chat/vault?seedHash=${seedHash}`);
+        const vaultData = await vaultRes.json();
+
+        if (vaultData.success && vaultData.vault) {
+          const decryptedJwk = await decryptPrivateKeyWithMnemonic(
+            vaultData.vault.ciphertext,
+            vaultData.vault.iv,
+            inputStr
+          );
+          const restoredKeys = await importKeyPair(decryptedJwk, vaultData.publicSpki);
+
+          const restoredIdentity = {
+            privateJwk: decryptedJwk,
+            publicSpki: vaultData.publicSpki,
+            fingerprint: vaultData.fingerprint,
+            nickname: vaultData.nickname,
+            mnemonic: inputStr
+          };
+
+          saveStoredIdentity(restoredIdentity);
+          alert(`🎉 ¡Identidad "${vaultData.nickname}" (0x${vaultData.fingerprint}) recuperada con éxito desde Cloudflare!`);
+          window.location.reload();
+          return;
+        }
+      } catch (vaultErr) {
+        console.warn('[Vault Recovery] Error al conectar con Cloudflare:', vaultErr);
+      }
+
+      alert('Las 12 palabras son válidas, pero aún no hay ninguna bóveda sincronizada en Cloudflare para esta frase.\n\nPara migrar entre navegadores sin conexión a Cloudflare, utiliza el archivo JSON exportado.');
     } catch (err) {
       alert(`Error al restaurar identidad: ${err.message}`);
     }

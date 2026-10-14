@@ -85,6 +85,7 @@ export class P2PMeshRoom {
 
     // Soporte para pruebas locales instantáneas entre pestañas (BroadcastChannel nativo)
     this.broadcastChannel = null;
+    this.cloudflareSocket = null;
     this.nostrSockets = [];
     this._nostrReconnectTimers = new Map();
     this.isDestroyed = false;
@@ -121,7 +122,10 @@ export class P2PMeshRoom {
       timestamp: Date.now()
     });
 
-    // 3. Conexión a relays públicos Nostr para matchmaking por Internet
+    // 3. Señalización nativa en Cloudflare Workers API (/api/chat/signal)
+    this._initCloudflareSignaling();
+
+    // 4. Conexión a relays públicos Nostr como fallback
     this._initNostrSignaling();
 
     // Notificar estado inicial listo
@@ -130,6 +134,43 @@ export class P2PMeshRoom {
         this.onStatusChange('ready', 'Sala abierta. Esperando a que otros compañeros se unan...');
       }
     }, 1500);
+  }
+
+  /**
+   * Conecta con la API de señalización nativa de Cloudflare Workers (chat.filthysilver.net).
+   * @private
+   */
+  _initCloudflareSignaling() {
+    if (typeof window === 'undefined' || !window.location || !window.location.host) return;
+
+    try {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${window.location.host}/api/chat/signal?roomId=${encodeURIComponent(this.roomId)}&peerId=${encodeURIComponent(this.peerId)}`;
+      const ws = new WebSocket(wsUrl);
+      this.cloudflareSocket = ws;
+
+      ws.onmessage = (event) => {
+        try {
+          const signal = JSON.parse(event.data);
+          this._handleSignal(signal);
+        } catch {}
+      };
+
+      ws.onclose = () => {
+        this.cloudflareSocket = null;
+        if (!this.isDestroyed) {
+          setTimeout(() => {
+            if (!this.isDestroyed) this._initCloudflareSignaling();
+          }, 4000);
+        }
+      };
+
+      ws.onerror = () => {
+        try { ws.close(); } catch {}
+      };
+    } catch (e) {
+      console.warn('[P2P] Señalización nativa de Cloudflare no disponible (usando Nostr):', e);
+    }
   }
 
   /**
@@ -235,6 +276,13 @@ export class P2PMeshRoom {
           ws.send(JSON.stringify(['EVENT', nostrEvent]));
         } catch {}
       }
+    }
+
+    // Emisión a través del WebSocket nativo en Cloudflare Workers (chat.filthysilver.net)
+    if (this.cloudflareSocket && this.cloudflareSocket.readyState === WebSocket.OPEN) {
+      try {
+        this.cloudflareSocket.send(content);
+      } catch {}
     }
   }
 
@@ -584,6 +632,18 @@ export class P2PMeshRoom {
 
     // 5. Transferencia de archivos P2P (FileDrop con certificación de autoría)
     if (packet.type === 'FILE_START') {
+      // Prevención DoS: limitar a máximo 5 transferencias simultáneas
+      if (this.incomingFileTransfers.size >= 5) {
+        console.warn('[P2P FileDrop] Rechazando transferencia: límite de transferencias concurrentes alcanzado.');
+        return;
+      }
+
+      // Validar tamaño máximo de archivo (2 GB)
+      if (packet.fileSize > 2 * 1024 * 1024 * 1024 || packet.totalChunks > 200000) {
+        console.warn('[P2P FileDrop] Archivo rechazado por exceder el tamaño máximo permitido (2 GB).');
+        return;
+      }
+
       this.incomingFileTransfers.set(packet.fileId, {
         meta: packet,
         receivedChunks: new Map(),
@@ -597,6 +657,10 @@ export class P2PMeshRoom {
     if (packet.type === 'FILE_CHUNK') {
       const transfer = this.incomingFileTransfers.get(packet.fileId);
       if (transfer) {
+        // Validar índice de chunk dentro del rango esperado
+        if (typeof packet.chunkIndex !== 'number' || packet.chunkIndex < 0 || packet.chunkIndex >= transfer.totalChunks) {
+          return;
+        }
         transfer.receivedChunks.set(packet.chunkIndex, base64ToBuffer(packet.data));
         transfer.lastActivity = Date.now();
         this.onFileProgress(packet.fileId, transfer.receivedChunks.size / transfer.totalChunks);
@@ -938,6 +1002,13 @@ export class P2PMeshRoom {
       try {
         this.broadcastChannel.close();
       } catch {}
+    }
+
+    if (this.cloudflareSocket) {
+      try {
+        this.cloudflareSocket.close();
+      } catch {}
+      this.cloudflareSocket = null;
     }
 
     for (const ws of this.nostrSockets) {

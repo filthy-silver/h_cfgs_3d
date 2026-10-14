@@ -8,6 +8,8 @@ import { onRequest as handleAulesRequest } from '../functions/api/aules.js';
 import { onRequest as handleEventsRequest } from '../functions/api/events.js';
 import { onRequest as handleSyncRequest } from '../functions/api/sync.js';
 import { onRequest as handleChatInvitesRequest } from '../functions/api/chat-invites.js';
+import { onRequest as handleChatVaultRequest } from '../functions/api/chat-vault.js';
+import { onRequest as handleChatSignalRequest } from '../functions/api/chat-signal.js';
 
 export default {
   async fetch(request, env, ctx) {
@@ -16,6 +18,16 @@ export default {
     // Endpoint del Árbol de Invitaciones y Trazabilidad del Chat P2P
     if (url.pathname === '/api/chat/invites' || url.pathname.startsWith('/api/chat/invites/')) {
       return handleChatInvitesRequest({ request, env, ctx });
+    }
+
+    // Endpoint de Bóveda Criptográfica Zero-Knowledge (Respaldo y Restauración)
+    if (url.pathname === '/api/chat/vault' || url.pathname.startsWith('/api/chat/vault/')) {
+      return handleChatVaultRequest({ request, env, ctx });
+    }
+
+    // Endpoint de Señalización WebRTC nativa (WebSockets y Fallback HTTP)
+    if (url.pathname === '/api/chat/signal' || url.pathname.startsWith('/api/chat/signal/')) {
+      return handleChatSignalRequest({ request, env, ctx });
     }
 
     // Endpoint de sincronización y emparejamiento (Pairing Handshake)
@@ -80,6 +92,7 @@ export default {
       headers.set('X-Content-Type-Options', 'nosniff');
       headers.set('X-Frame-Options', 'DENY');
       headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+      headers.set('Content-Security-Policy', "default-src 'self'; connect-src 'self' wss: https: stun:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; object-src 'none';");
 
       return new Response(response.body, {
         status: response.status,
@@ -95,6 +108,7 @@ export default {
       headers.set('X-Content-Type-Options', 'nosniff');
       headers.set('X-Frame-Options', 'DENY');
       headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+      headers.set('Content-Security-Policy', "default-src 'self'; connect-src 'self' wss: https: stun:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; object-src 'none';");
 
       return new Response(response.body, {
         status: response.status,
