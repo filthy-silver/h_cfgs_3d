@@ -15,21 +15,44 @@ let inMemoryExams = [];
 
 /**
  * Obtiene el listado de exámenes de KV o memoria fallback.
+ * Purga de forma proactiva cualquier examen de prueba residual para evitar que reaparezca.
  * @param {Object} env
  * @returns {Promise<Array>}
  */
 async function getStoredExams(env) {
+  let exams = inMemoryExams;
+  let fromKv = false;
   if (env && env.EVENTS_KV) {
     try {
       const raw = await env.EVENTS_KV.get('school_exams');
       if (raw) {
-        return JSON.parse(raw);
+        exams = JSON.parse(raw);
+        fromKv = true;
       }
     } catch (err) {
       console.warn('[Events API] Error al leer de EVENTS_KV, recurriendo a memoria:', err);
     }
   }
-  return inMemoryExams;
+
+  // Filtrar de forma permanente cualquier examen de prueba residual o de demostración
+  const isDemoExam = (e) => {
+    if (!e) return true;
+    const id = String(e.id || '').toLowerCase();
+    const title = String(e.title || '').toLowerCase();
+    return id === 'exam-sample-1' || id === 'exam-demo-1' || title.includes('principios de animación y rigging') || title.includes('examen de prueba');
+  };
+
+  const cleaned = Array.isArray(exams) ? exams.filter(e => !isDemoExam(e)) : [];
+
+  // Si se detectaron exámenes de muestra en KV o memoria, sincronizar la limpieza de inmediato
+  if (cleaned.length !== exams.length) {
+    if (fromKv && env && env.EVENTS_KV) {
+      await env.EVENTS_KV.put('school_exams', JSON.stringify(cleaned)).catch(() => {});
+    }
+    inMemoryExams = cleaned;
+  }
+
+  return cleaned;
 }
 
 /**
@@ -126,7 +149,8 @@ export async function onRequest(context) {
         status: 200,
         headers: {
           'Content-Type': 'application/json; charset=utf-8',
-          'Cache-Control': 'public, max-age=30, s-maxage=60',
+          'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+          'Pragma': 'no-cache',
           ...CORS_HEADERS
         }
       });
@@ -244,11 +268,23 @@ export async function onRequest(context) {
     }
   }
 
-  // 5. DELETE: Eliminar examen por ID (?id=...)
+  // 5. DELETE: Eliminar examen por ID (?id=...) o todos (?all=true o ?id=all)
   if (method === 'DELETE') {
     try {
       const url = new URL(request.url);
       const idToDelete = url.searchParams.get('id');
+      const deleteAll = url.searchParams.get('all') === 'true' || idToDelete === 'all';
+
+      if (deleteAll) {
+        await saveStoredExams(env, []);
+        return new Response(JSON.stringify({
+          success: true,
+          message: 'Todos los exámenes han sido eliminados correctamente'
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json; charset=utf-8', ...CORS_HEADERS }
+        });
+      }
 
       if (!idToDelete) {
         return new Response(JSON.stringify({

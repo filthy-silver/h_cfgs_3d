@@ -59,7 +59,7 @@ function updateAssignmentsPanel() {
  */
 async function loadExams() {
   try {
-    const response = await fetch('/api/events');
+    const response = await fetch('/api/events', { cache: 'no-store' });
     if (response.ok) {
       const data = await response.json();
       if (data && data.success && Array.isArray(data.exams)) {

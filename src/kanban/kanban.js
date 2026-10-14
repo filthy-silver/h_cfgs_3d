@@ -39,17 +39,6 @@ const FALLBACK_ITEMS = [
     type: "aules"
   },
   {
-    id: "exam-demo-1",
-    title: "Examen Parcial: Principios de Animación y Rigging",
-    mod: "anim",
-    date: new Date(Date.now() + 5 * 24 * 3600 * 1000).toISOString().split('T')[0],
-    time: "17:35",
-    notes: "Aula INF-1 · Bloque 1 y 2",
-    dueIso: new Date(Date.now() + 5 * 24 * 3600 * 1000).toISOString(),
-    dueTimestamp: Date.now() + 5 * 24 * 3600 * 1000,
-    type: "exam"
-  },
-  {
     id: "aules-demo-2",
     title: "Memoria del Proyecto Intermodular (Fase 1)",
     description: "Subir documento en formato PDF con la biblia de arte y el diseño técnico preliminar.",
@@ -91,7 +80,7 @@ async function fetchAulesAssignments() {
  */
 async function fetchClassExams() {
   try {
-    const res = await fetch('/api/events');
+    const res = await fetch('/api/events', { cache: 'no-store' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     if (data && data.success && Array.isArray(data.exams)) {

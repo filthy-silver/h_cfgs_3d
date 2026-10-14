@@ -3,7 +3,7 @@
  * @description Service Worker con estrategia Network-First para navegación y Stale-While-Revalidate para recursos estáticos.
  */
 
-const CACHE_NAME = 'horario-v10';
+const CACHE_NAME = 'horario-v11';
 
 const STATIC_ASSETS = [
   './',
