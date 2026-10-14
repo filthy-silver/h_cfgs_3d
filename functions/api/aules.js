@@ -256,7 +256,9 @@ async function getOrGenerateSummary(env, assignment) {
       const cached = await env.EVENTS_KV.get(kvKey);
       if (cached) {
         const parsed = JSON.parse(cached);
-        return { ...parsed, cached: true };
+        if (parsed && typeof parsed.short === 'string') {
+          return { ...parsed, cached: true };
+        }
       }
     } catch (err) {
       console.warn('[AulesAI] Error al leer KV:', err);
@@ -295,14 +297,20 @@ Responde ÚNICAMENTE con un JSON válido y estricto con este esquema exacto (sin
         rawText = aiRes.text;
       }
 
-      // Limpiar bloques de código markdown si los hay
+      // Limpiar bloques de código markdown y extraer substring JSON seguro
       const cleanJson = rawText
         .replace(/^```json\s*/i, '')
         .replace(/^```\s*/i, '')
         .replace(/\s*```$/, '')
         .trim();
 
-      const parsedJson = JSON.parse(cleanJson);
+      let jsonCandidate = cleanJson;
+      const jsonMatch = cleanJson.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        jsonCandidate = jsonMatch[0];
+      }
+
+      const parsedJson = JSON.parse(jsonCandidate);
       if (parsedJson && typeof parsedJson.short === 'string') {
         const result = {
           short: parsedJson.short.trim(),
@@ -335,7 +343,7 @@ Responde ÚNICAMENTE con un JSON válido y estricto con este esquema exacto (sin
 }
 
 /**
- * Enriquece un array de entregas con resúmenes de IA / heurísticos en paralelo.
+ * Enriquece un array de entregas con resúmenes de IA / heurísticos por lotes para respetar cuotas.
  * @param {Object} env
  * @param {Array<Object>} assignments
  * @returns {Promise<Array<Object>>}
@@ -345,16 +353,24 @@ async function enrichAssignmentsWithAi(env, assignments) {
     return [];
   }
 
-  return Promise.all(
-    assignments.map(async (item) => {
-      const summary = await getOrGenerateSummary(env, item);
-      return {
-        ...item,
-        url: item.url || 'https://aules.edu.gva.es/fp/',
-        aiSummary: summary
-      };
-    })
-  );
+  const enriched = [];
+  const chunkSize = 3;
+  for (let i = 0; i < assignments.length; i += chunkSize) {
+    const chunk = assignments.slice(i, i + chunkSize);
+    const chunkResults = await Promise.all(
+      chunk.map(async (item) => {
+        const summary = await getOrGenerateSummary(env, item);
+        return {
+          ...item,
+          url: item.url || 'https://aules.edu.gva.es/fp/',
+          aiSummary: summary
+        };
+      })
+    );
+    enriched.push(...chunkResults);
+  }
+
+  return enriched;
 }
 
 export async function onRequest(context) {

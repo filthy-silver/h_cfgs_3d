@@ -15,6 +15,7 @@ import {
   deletePersonalTask
 } from './kanban-store.js';
 import { renderCardHtml, resolveCardSubject, formatCardDueDate, escapeHtml } from './kanban-cards.js';
+import { sanitizeUrl } from '../domain/sanitizer.js';
 import { initKanbanDnD } from './kanban-dnd.js';
 import { initKanbanNotes, renderNotesGrid } from './kanban-notes.js';
 import { initKanbanSync } from './kanban-sync.js';
@@ -23,6 +24,7 @@ import { initKanbanSync } from './kanban-sync.js';
 let allItems = [];
 let editingTaskId = null;
 let currentSearchTerm = '';
+let lastActiveElement = null;
 
 /**
  * Datos de demostración de respaldo en caso de entorno local sin conexión o APIs no disponibles.
@@ -349,24 +351,35 @@ function openAssignmentDetailModal(item) {
     fullDetailsWrapper?.classList.add('is-hidden');
   }
 
-  // Enlace directo a Aules
+  // Enlace directo a Aules (Sanitizado rigurosamente)
   const linkEl = document.getElementById('assignment-detail-link');
   if (linkEl) {
-    linkEl.href = item.url || 'https://aules.edu.gva.es/fp/';
+    const safeUrl = sanitizeUrl(item.url);
+    linkEl.href = safeUrl || 'https://aules.edu.gva.es/fp/';
   }
 
+  lastActiveElement = document.activeElement;
   modal.classList.add('is-open');
   modal.setAttribute('aria-hidden', 'false');
+
+  // Mover el foco de forma accesible al botón de cierre del modal
+  const closeBtn = modal.querySelector('[data-close-assignment-modal]');
+  setTimeout(() => closeBtn?.focus(), 40);
 }
 
 /**
- * Cierra el diálogo de detalle de entrega.
+ * Cierra el diálogo de detalle de entrega y devuelve el foco al elemento anterior.
  */
 function closeAssignmentDetailModal() {
   const modal = document.getElementById('assignment-detail-modal');
   if (!modal) return;
   modal.classList.remove('is-open');
   modal.setAttribute('aria-hidden', 'true');
+
+  if (lastActiveElement && typeof lastActiveElement.focus === 'function') {
+    lastActiveElement.focus();
+    lastActiveElement = null;
+  }
 }
 
 /**
@@ -450,6 +463,24 @@ function setupModalEvents() {
  * Delegación de eventos para acciones en las tarjetas (editar, eliminar, detalle Aules, selector móvil de columna).
  */
 function setupCardDelegation() {
+  // Manejo de pulsación de teclado (Enter o Espacio) en tarjetas accesibles con role="button"
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      // Ignorar si el foco está en un selector o botón interno
+      if (e.target.closest('a, select, button, input, textarea')) return;
+
+      const aulesCard = e.target.closest('.kanban-card.is-aules');
+      if (aulesCard) {
+        e.preventDefault();
+        const cardId = aulesCard.dataset.id;
+        const item = allItems.find(i => i.id === cardId);
+        if (item) {
+          openAssignmentDetailModal(item);
+        }
+      }
+    }
+  });
+
   document.addEventListener('click', (e) => {
     // Editar tarea personal
     const editBtn = e.target.closest('.btn-edit-task');

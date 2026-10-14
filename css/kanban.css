@@ -1680,4 +1680,18 @@ body {
   font-weight: 600;
 }
 
+@media (max-width: 480px) {
+  .assignment-modal-actions {
+    flex-direction: column-reverse;
+    gap: 0.5rem;
+  }
+  .assignment-modal-actions .modal-btn,
+  .assignment-modal-actions .btn-go-aules {
+    width: 100%;
+    justify-content: center;
+    min-height: 44px;
+  }
+}
+
+
 

@@ -3,17 +3,19 @@
  * @description Service Worker con estrategia Network-First para navegación y Stale-While-Revalidate para recursos estáticos.
  */
 
-const CACHE_NAME = 'horario-v14';
+const CACHE_NAME = 'horario-v15';
 
 const STATIC_ASSETS = [
   './',
   './index.html',
   './kanban.html',
+  './chat.html',
   './manifest.json',
   './icon-192.png',
   './icon-512.png',
   './css/styles.css',
   './css/kanban.css',
+  './css/chat.css',
   './src/main.js',
   './src/data/schedule.data.js',
   './src/domain/time-tracker.js',
@@ -30,7 +32,11 @@ const STATIC_ASSETS = [
   './src/kanban/kanban-cards.js',
   './src/kanban/kanban-dnd.js',
   './src/kanban/kanban-notes.js',
-  './src/kanban/kanban-sync.js'
+  './src/kanban/kanban-sync.js',
+  './src/chat/app.js',
+  './src/chat/crypto.js',
+  './src/chat/p2p.js',
+  './src/chat/storage.js'
 ];
 
 self.addEventListener('install', (event) => {
@@ -97,6 +103,12 @@ self.addEventListener('fetch', (event) => {
           if (url.pathname.includes('kanban')) {
             const kanbanCached = await caches.match('./kanban.html');
             if (kanbanCached) return kanbanCached;
+          }
+
+          // Si la ruta solicitada corresponde al Chat P2P (/chat o /chat.html)
+          if (url.pathname.includes('chat')) {
+            const chatCached = await caches.match('./chat.html');
+            if (chatCached) return chatCached;
           }
 
           // Fallback predeterminado al horario principal
