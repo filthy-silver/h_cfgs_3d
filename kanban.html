@@ -373,6 +373,59 @@
   </div>
 </div>
 
+<!-- Modal: Detalle de Entrega de Aules con Resumen Inteligente -->
+<div class="modal-backdrop" id="assignment-detail-modal" role="dialog" aria-modal="true" aria-labelledby="assignment-detail-title" aria-hidden="true">
+  <div class="modal-dialog assignment-detail-dialog">
+    <div class="modal-header">
+      <div class="modal-title-box">
+        <span class="badge badge-aules">📚 Aules</span>
+        <span id="assignment-detail-badge-sub" class="badge badge-subject"></span>
+      </div>
+      <button type="button" class="modal-close" data-close-assignment-modal aria-label="Cerrar diálogo">&times;</button>
+    </div>
+    <div class="modal-body assignment-modal-body">
+      <h2 class="assignment-modal-title" id="assignment-detail-title"></h2>
+
+      <div class="assignment-meta-row">
+        <div class="assignment-due-badge" id="assignment-detail-due"></div>
+        <div class="assignment-urgency-badge" id="assignment-detail-urgency"></div>
+      </div>
+
+      <!-- Sección Resumen IA / Objetivo -->
+      <div class="assignment-summary-section">
+        <div class="assignment-section-header">
+          <span class="summary-icon" aria-hidden="true">⚡</span>
+          <h3>Resumen de la entrega</h3>
+          <span class="badge badge-ai-source" id="assignment-detail-ai-source">Workers AI</span>
+        </div>
+        <p class="assignment-summary-p" id="assignment-detail-paragraph"></p>
+      </div>
+
+      <!-- Sección Entregables Requeridos -->
+      <div class="assignment-deliverables-section" id="assignment-deliverables-box">
+        <h4 class="deliverables-heading">📦 Archivos o formatos requeridos:</h4>
+        <div class="deliverables-list" id="assignment-detail-deliverables"></div>
+      </div>
+
+      <!-- Sección Enunciado original plegable -->
+      <details class="assignment-full-details" id="assignment-full-details-wrapper">
+        <summary class="assignment-full-summary">Ver enunciado original del profesor</summary>
+        <div class="assignment-original-text" id="assignment-detail-original"></div>
+      </details>
+    </div>
+
+    <div class="modal-actions assignment-modal-actions">
+      <button type="button" class="modal-btn" data-close-assignment-modal>Cerrar</button>
+      <a href="#" target="_blank" rel="noopener noreferrer" class="modal-btn primary btn-go-aules" id="assignment-detail-link">
+        <span>Ir a la entrega en Aules</span>
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+          <path fill="currentColor" d="M14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3m-2 16H5V5h7V3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7h-2v7z"/>
+        </svg>
+      </a>
+    </div>
+  </div>
+</div>
+
 <script type="module" src="/src/kanban/kanban.js"></script>
 </body>
 </html>

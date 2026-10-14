@@ -17,3 +17,7 @@ TZ = "Europe/Madrid"
 binding = "EVENTS_KV"
 id = "578b0b0f295d45a5ac766ff9dcab596c"
 
+# Cloudflare Workers AI para resúmenes inteligentes de entregas de Aules (Moodle)
+[ai]
+binding = "AI"
+

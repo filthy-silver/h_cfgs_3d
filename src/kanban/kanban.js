@@ -14,7 +14,7 @@ import {
   savePersonalTask,
   deletePersonalTask
 } from './kanban-store.js';
-import { renderCardHtml } from './kanban-cards.js';
+import { renderCardHtml, resolveCardSubject, formatCardDueDate, escapeHtml } from './kanban-cards.js';
 import { initKanbanDnD } from './kanban-dnd.js';
 import { initKanbanNotes, renderNotesGrid } from './kanban-notes.js';
 import { initKanbanSync } from './kanban-sync.js';
@@ -278,13 +278,106 @@ function closePersonalTaskModal() {
 }
 
 /**
- * Configura los eventos del formulario y modal de tareas personales.
+ * Abre el diálogo de detalle enriquecido para una entrega de Aules.
+ * @param {Object} item
+ */
+function openAssignmentDetailModal(item) {
+  const modal = document.getElementById('assignment-detail-modal');
+  if (!modal || !item) return;
+
+  const subject = resolveCardSubject(item);
+  const { formattedDate, relativeBadge, isUrgent } = formatCardDueDate(item.dueIso || item.dueTimestamp);
+  const cleanTitle = (item.title || '').replace(/^(Venciment de |Vencimiento de )/i, '').trim();
+
+  // Badge de módulo
+  const badgeSub = document.getElementById('assignment-detail-badge-sub');
+  if (badgeSub) {
+    badgeSub.textContent = subject.name;
+    badgeSub.style.borderColor = `var(${subject.colorVar})`;
+    badgeSub.style.color = `var(${subject.colorVar})`;
+  }
+
+  // Título
+  const titleEl = document.getElementById('assignment-detail-title');
+  if (titleEl) {
+    titleEl.textContent = cleanTitle;
+  }
+
+  // Fecha y urgencia
+  const dueEl = document.getElementById('assignment-detail-due');
+  if (dueEl) {
+    dueEl.innerHTML = formattedDate ? `📅 ${formattedDate}` : 'Sin fecha límite especificada';
+  }
+
+  const urgencyEl = document.getElementById('assignment-detail-urgency');
+  if (urgencyEl) {
+    urgencyEl.textContent = relativeBadge || '';
+    urgencyEl.className = `assignment-urgency-badge ${isUrgent ? 'urgent' : ''}`;
+  }
+
+  // Resumen inteligente (Párrafo o Short)
+  const paragraphEl = document.getElementById('assignment-detail-paragraph');
+  const aiSourceEl = document.getElementById('assignment-detail-ai-source');
+  const summaryParagraph = item.aiSummary?.paragraph || item.aiSummary?.short || item.description || 'Consulta los detalles en el enlace de Aules.';
+  if (paragraphEl) {
+    paragraphEl.textContent = summaryParagraph;
+  }
+  if (aiSourceEl) {
+    aiSourceEl.textContent = item.aiSummary?.source === 'ai' ? '⚡ Resumen Workers AI' : 'Resumen inteligente';
+  }
+
+  // Entregables
+  const deliverablesBox = document.getElementById('assignment-deliverables-box');
+  const deliverablesList = document.getElementById('assignment-detail-deliverables');
+  const deliverables = Array.isArray(item.aiSummary?.deliverables) ? item.aiSummary.deliverables : [];
+  if (deliverables.length > 0 && deliverablesList) {
+    deliverablesList.innerHTML = deliverables
+      .map(ext => `<span class="deliverable-tag-large">${escapeHtml(ext)}</span>`)
+      .join('');
+    deliverablesBox?.classList.remove('is-hidden');
+  } else {
+    deliverablesBox?.classList.add('is-hidden');
+  }
+
+  // Enunciado original completo
+  const fullDetailsWrapper = document.getElementById('assignment-full-details-wrapper');
+  const originalTextEl = document.getElementById('assignment-detail-original');
+  if (item.description && item.description.trim()) {
+    if (originalTextEl) originalTextEl.textContent = item.description;
+    fullDetailsWrapper?.classList.remove('is-hidden');
+  } else {
+    fullDetailsWrapper?.classList.add('is-hidden');
+  }
+
+  // Enlace directo a Aules
+  const linkEl = document.getElementById('assignment-detail-link');
+  if (linkEl) {
+    linkEl.href = item.url || 'https://aules.edu.gva.es/fp/';
+  }
+
+  modal.classList.add('is-open');
+  modal.setAttribute('aria-hidden', 'false');
+}
+
+/**
+ * Cierra el diálogo de detalle de entrega.
+ */
+function closeAssignmentDetailModal() {
+  const modal = document.getElementById('assignment-detail-modal');
+  if (!modal) return;
+  modal.classList.remove('is-open');
+  modal.setAttribute('aria-hidden', 'true');
+}
+
+/**
+ * Configura los eventos del formulario y modal de tareas personales y detalle de Aules.
  */
 function setupModalEvents() {
-  const modal = document.getElementById('personal-task-modal');
+  const modalPersonal = document.getElementById('personal-task-modal');
+  const modalAssignment = document.getElementById('assignment-detail-modal');
   const form = document.getElementById('personal-task-form');
   const btnOpen = document.getElementById('btn-add-personal-task');
-  const btnClose = modal?.querySelectorAll('[data-close-modal]');
+  const btnClose = modalPersonal?.querySelectorAll('[data-close-modal]');
 
   btnOpen?.addEventListener('click', () => openPersonalTaskModal(null));
 
@@ -292,17 +385,29 @@ function setupModalEvents() {
     btn.addEventListener('click', closePersonalTaskModal);
   });
 
-  // Cerrar al pulsar escape
+  // Cerrar modal de entrega con botón de cierre
+  document.querySelectorAll('[data-close-assignment-modal]').forEach(btn => {
+    btn.addEventListener('click', closeAssignmentDetailModal);
+  });
+
+  // Cerrar modales al pulsar Escape
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && modal?.classList.contains('is-open')) {
-      closePersonalTaskModal();
+    if (e.key === 'Escape') {
+      if (modalPersonal?.classList.contains('is-open')) closePersonalTaskModal();
+      if (modalAssignment?.classList.contains('is-open')) closeAssignmentDetailModal();
     }
   });
 
   // Cerrar al pulsar el backdrop
-  modal?.addEventListener('click', (e) => {
-    if (e.target === modal) {
+  modalPersonal?.addEventListener('click', (e) => {
+    if (e.target === modalPersonal) {
       closePersonalTaskModal();
+    }
+  });
+
+  modalAssignment?.addEventListener('click', (e) => {
+    if (e.target === modalAssignment) {
+      closeAssignmentDetailModal();
     }
   });
 
@@ -342,7 +447,7 @@ function setupModalEvents() {
 }
 
 /**
- * Delegación de eventos para acciones en las tarjetas (editar, eliminar, selector móvil de columna).
+ * Delegación de eventos para acciones en las tarjetas (editar, eliminar, detalle Aules, selector móvil de columna).
  */
 function setupCardDelegation() {
   document.addEventListener('click', (e) => {
@@ -364,6 +469,17 @@ function setupCardDelegation() {
         renderBoard();
       }
       return;
+    }
+
+    // Abrir modal de detalle para tarjetas de Aules (al hacer clic en cualquier parte de la tarjeta o en el hint)
+    const aulesCard = e.target.closest('.kanban-card.is-aules');
+    if (aulesCard && !e.target.closest('a, select, button, .card-actions-row, .card-move-control')) {
+      const cardId = aulesCard.dataset.id;
+      const item = allItems.find(i => i.id === cardId);
+      if (item) {
+        openAssignmentDetailModal(item);
+        return;
+      }
     }
   });
 

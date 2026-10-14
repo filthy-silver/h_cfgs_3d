@@ -934,6 +934,24 @@ table.has-focus td.break {
   margin: 0;
 }
 
+.assignment-deliverables-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin: 0.15rem 0;
+}
+
+.deliverable-mini-pill {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
 .assignment-footer-right {
   display: flex;
   align-items: center;

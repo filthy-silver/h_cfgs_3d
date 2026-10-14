@@ -62,6 +62,26 @@ export default {
       return new Response('Not Found', { status: 404 });
     }
 
+    // Despacho del Chat P2P (Rutas limpias /chat, /chat/* o subdominio chat.filthysilver.net)
+    const isChatHost = url.hostname.startsWith('chat.');
+    const isChatRoute = url.pathname === '/chat' || url.pathname.startsWith('/chat/');
+
+    if (env.ASSETS && ((isChatHost && url.pathname === '/') || isChatRoute)) {
+      const chatUrl = new URL('/chat.html', request.url);
+      const chatRequest = new Request(chatUrl, request);
+      const response = await env.ASSETS.fetch(chatRequest);
+      const headers = new Headers(response.headers);
+      headers.set('X-Content-Type-Options', 'nosniff');
+      headers.set('X-Frame-Options', 'DENY');
+      headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+
+      return new Response(response.body, {
+        status: response.status,
+        statusText: response.statusText,
+        headers
+      });
+    }
+
     // Si se despliega con assets estáticos (con cabeceras de seguridad forzadas)
     if (env.ASSETS) {
       const response = await env.ASSETS.fetch(request);

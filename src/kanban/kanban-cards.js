@@ -141,6 +141,9 @@ export function renderCardHtml(item, currentColumn) {
     typeBadgeHtml = `<span class="badge badge-personal">👤 Personal</span>`;
   } else if (isAules) {
     typeBadgeHtml = `<span class="badge badge-aules">📚 Aules</span>`;
+    if (item.aiSummary?.source === 'ai') {
+      typeBadgeHtml += `<span class="badge badge-ai-chip" title="Resumen enriquecido con Cloudflare Workers AI">⚡ IA</span>`;
+    }
   }
 
   // Badge de urgencia
@@ -151,19 +154,36 @@ export function renderCardHtml(item, currentColumn) {
   // Enlace externo (Aules)
   const safeAulesUrl = (isAules && item.url) ? sanitizeUrl(item.url) : '';
   const aulesLinkHtml = safeAulesUrl
-    ? `<a href="${safeAulesUrl}" target="_blank" rel="noopener noreferrer" class="card-link" title="Abrir entrega en Moodle Aules">
-        <span>Aules</span>
-        <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true">
-          <path fill="currentColor" d="M14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3m-2 16H5V5h7V3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7h-2v7z"/>
-        </svg>
+    ? `<a href="${safeAulesUrl}" target="_blank" rel="noopener noreferrer" class="card-link" title="Abrir entrega directamente en Moodle Aules" onclick="event.stopPropagation()">
+        <span>Aules ↗</span>
       </a>`
     : '';
 
-  // Observaciones o notas adicionales
-  const notesText = item.notes || item.description || '';
-  const notesHtml = notesText
-    ? `<p class="card-notes">${escapeHtml(notesText)}</p>`
-    : '';
+  // Contenido del cuerpo de la tarjeta: Resumen de 1 frase + entregables para Aules
+  let cardBodyHtml = '';
+  if (isAules) {
+    const summaryShort = item.aiSummary?.short || (item.description ? item.description.slice(0, 110) + '…' : '');
+    const deliverables = Array.isArray(item.aiSummary?.deliverables) ? item.aiSummary.deliverables : [];
+    const deliverablesHtml = deliverables.length > 0
+      ? `<div class="card-deliverables" aria-label="Archivos requeridos">
+          ${deliverables.map(ext => `<span class="deliverable-tag">${escapeHtml(ext)}</span>`).join('')}
+         </div>`
+      : '';
+
+    cardBodyHtml = `
+      ${summaryShort ? `<p class="card-summary-short" title="Clic para ver detalle y requisitos">${escapeHtml(summaryShort)}</p>` : ''}
+      ${deliverablesHtml}
+      <div class="card-detail-hint">
+        <span>Ver detalle</span>
+        <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path fill="currentColor" d="M7 10l5 5 5-5z"/></svg>
+      </div>
+    `;
+  } else {
+    const notesText = item.notes || item.description || '';
+    cardBodyHtml = notesText
+      ? `<p class="card-notes">${escapeHtml(notesText)}</p>`
+      : '';
+  }
 
   // Botones de acción para tarjetas personales (editar / eliminar)
   const personalActionsHtml = isPersonal
@@ -179,7 +199,7 @@ export function renderCardHtml(item, currentColumn) {
 
   // Selector rápido para mover entre columnas (Accesibilidad móvil & teclado)
   const columnSelectorHtml = `
-    <div class="card-move-control" aria-label="Mover tarjeta a otra columna">
+    <div class="card-move-control" aria-label="Mover tarjeta a otra columna" onclick="event.stopPropagation()">
       <label class="sr-only" for="move-select-${item.id}">Mover estado</label>
       <select id="move-select-${item.id}" class="card-move-select" data-move-id="${item.id}">
         <option value="pending" ${currentColumn === 'pending' ? 'selected' : ''}>⏳ Pendiente</option>
@@ -198,7 +218,8 @@ export function renderCardHtml(item, currentColumn) {
       data-id="${item.id}"
       data-type="${item.type}"
       data-column="${currentColumn}"
-      role="listitem"
+      role="${isAules ? 'button' : 'listitem'}"
+      ${isAules ? 'aria-haspopup="dialog" title="Haz clic para ver el resumen detallado y requisitos"' : ''}
       tabindex="0"
     >
       <div class="card-top-bar">
@@ -213,7 +234,7 @@ export function renderCardHtml(item, currentColumn) {
 
       <h3 class="card-title">${escapeHtml(cleanTitle)}</h3>
 
-      ${notesHtml}
+      ${cardBodyHtml}
 
       <div class="card-footer">
         <div class="card-due-info">

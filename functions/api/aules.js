@@ -185,13 +185,176 @@ function parseMoodleIcs(rawIcs) {
         title: event.title || 'Entrega pendiente',
         description: event.description || '',
         category: event.category || '',
-        url: event.url || null,
+        url: event.url || 'https://aules.edu.gva.es/fp/',
         dueIso: targetDate ? targetDate.toISOString() : null,
         dueTimestamp: targetDate ? targetDate.getTime() : 0
       };
     })
     .filter(item => item.dueTimestamp > now.getTime())
     .sort((a, b) => a.dueTimestamp - b.dueTimestamp);
+}
+
+/**
+ * Extrae extensiones o entregables técnicos mediante heurística de expresiones regulares.
+ * @param {string} text
+ * @returns {string[]}
+ */
+function extractHeuristicDeliverables(text) {
+  if (!text) return [];
+  const extRegex = /\.(blend|fbx|obj|stl|ma|mb|max|c4d|hip|psd|ai|png|jpg|jpeg|tga|exr|mp4|mov|avi|pdf|zip|rar|7z|gltf|glb)\b/gi;
+  const matches = text.match(extRegex) || [];
+  const normalized = Array.from(new Set(matches.map(m => m.toLowerCase())));
+  return normalized.slice(0, 5);
+}
+
+/**
+ * Genera un resumen heurístico instantáneo sin consumo de IA.
+ * @param {Object} assignment
+ * @returns {Object}
+ */
+function generateHeuristicSummary(assignment) {
+  const desc = (assignment.description || '').replace(/\r\n/g, '\n').trim();
+  const title = (assignment.title || '').trim();
+  const deliverables = extractHeuristicDeliverables(`${title} ${desc}`);
+
+  let short = '';
+  if (desc) {
+    const firstLine = desc.split('\n')[0].trim();
+    const sentenceMatch = firstLine.match(/^([^.?!]+[.?!])/);
+    short = sentenceMatch ? sentenceMatch[1].trim() : (firstLine.slice(0, 110).trim() + (firstLine.length > 110 ? '…' : ''));
+  }
+  if (!short || short.length < 15) {
+    short = deliverables.length > 0 
+      ? `Subir archivos requeridos (${deliverables.join(', ')}) antes del plazo fijado.`
+      : `Completar y entregar la actividad requerida en el aula virtual.`;
+  }
+
+  const paragraph = desc 
+    ? (desc.slice(0, 300).trim() + (desc.length > 300 ? '…' : ''))
+    : `Actividad del módulo ${assignment.category || 'CFGS 3D'}. Consulta los requisitos técnicos y la rúbrica completa en el enlace de Aules.`;
+
+  return {
+    short,
+    paragraph,
+    deliverables,
+    source: 'heuristic'
+  };
+}
+
+/**
+ * Obtiene el resumen de una entrega desde la memoria KV o lo genera con Cloudflare Workers AI.
+ * @param {Object} env Entorno de Cloudflare Workers (con EVENTS_KV y AI)
+ * @param {Object} assignment Datos de la entrega
+ * @returns {Promise<Object>}
+ */
+async function getOrGenerateSummary(env, assignment) {
+  const kvKey = `aules_ai:${assignment.id}`;
+
+  // 1. Comprobar si ya está en caché KV (Memoización de coste cero)
+  if (env?.EVENTS_KV) {
+    try {
+      const cached = await env.EVENTS_KV.get(kvKey);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        return { ...parsed, cached: true };
+      }
+    } catch (err) {
+      console.warn('[AulesAI] Error al leer KV:', err);
+    }
+  }
+
+  // 2. Si hay AI disponible, invocar Llama 3.1 8B Instruct
+  if (env?.AI && typeof env.AI.run === 'function') {
+    try {
+      const prompt = `Eres un asistente educativo para alumnos del ciclo CFGS de Animaciones 3D, Juegos y Entornos Interactivos.
+Analiza la siguiente tarea escolar y genera un resumen estructurado.
+
+Título: ${assignment.title}
+Módulo: ${assignment.category || 'Animación 3D'}
+Enunciado: ${assignment.description ? assignment.description.slice(0, 1200) : 'Sin descripción adicional'}
+
+Responde ÚNICAMENTE con un JSON válido y estricto con este esquema exacto (sin bloques de código ni explicaciones):
+{
+  "short": "Una única frase directa (máximo 120 caracteres) resumiendo qué debe entregar el alumno.",
+  "paragraph": "Un párrafo claro y profesional (máximo 280 caracteres) explicando el objetivo práctico, técnica o requisitos.",
+  "deliverables": [".blend", ".pdf"]
+}`;
+
+      const aiRes = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
+        prompt,
+        max_tokens: 300,
+        temperature: 0.2
+      });
+
+      let rawText = '';
+      if (typeof aiRes === 'string') {
+        rawText = aiRes;
+      } else if (aiRes && typeof aiRes.response === 'string') {
+        rawText = aiRes.response;
+      } else if (aiRes && typeof aiRes.text === 'string') {
+        rawText = aiRes.text;
+      }
+
+      // Limpiar bloques de código markdown si los hay
+      const cleanJson = rawText
+        .replace(/^```json\s*/i, '')
+        .replace(/^```\s*/i, '')
+        .replace(/\s*```$/, '')
+        .trim();
+
+      const parsedJson = JSON.parse(cleanJson);
+      if (parsedJson && typeof parsedJson.short === 'string') {
+        const result = {
+          short: parsedJson.short.trim(),
+          paragraph: (parsedJson.paragraph || '').trim(),
+          deliverables: Array.isArray(parsedJson.deliverables) 
+            ? parsedJson.deliverables.map(d => String(d).toLowerCase().startsWith('.') ? d.toLowerCase() : `.${d.toLowerCase()}`)
+            : extractHeuristicDeliverables(assignment.description),
+          source: 'ai'
+        };
+
+        // Guardar en KV de forma permanente para que no vuelva a computarse jamás
+        if (env?.EVENTS_KV) {
+          try {
+            await env.EVENTS_KV.put(kvKey, JSON.stringify(result));
+          } catch (kvErr) {
+            console.warn('[AulesAI] Error al guardar en KV:', kvErr);
+          }
+        }
+
+        return result;
+      }
+    } catch (aiErr) {
+      console.warn('[AulesAI] Inferencia de Workers AI no completada, aplicando fallback:', aiErr);
+    }
+  }
+
+  // 3. Fallback heurístico instantáneo (tolerancia total a fallos)
+  const heuristic = generateHeuristicSummary(assignment);
+  return heuristic;
+}
+
+/**
+ * Enriquece un array de entregas con resúmenes de IA / heurísticos en paralelo.
+ * @param {Object} env
+ * @param {Array<Object>} assignments
+ * @returns {Promise<Array<Object>>}
+ */
+async function enrichAssignmentsWithAi(env, assignments) {
+  if (!Array.isArray(assignments) || assignments.length === 0) {
+    return [];
+  }
+
+  return Promise.all(
+    assignments.map(async (item) => {
+      const summary = await getOrGenerateSummary(env, item);
+      return {
+        ...item,
+        url: item.url || 'https://aules.edu.gva.es/fp/',
+        aiSummary: summary
+      };
+    })
+  );
 }
 
 export async function onRequest(context) {
@@ -253,11 +416,13 @@ export async function onRequest(context) {
       }
     ];
 
+    const enrichedMock = await enrichAssignmentsWithAi(context.env, mockAssignments);
+
     return new Response(
       JSON.stringify({
         success: true,
-        count: mockAssignments.length,
-        assignments: mockAssignments,
+        count: enrichedMock.length,
+        assignments: enrichedMock,
         isDemo: true
       }),
       {
@@ -301,7 +466,8 @@ export async function onRequest(context) {
     }
 
     const rawIcs = await response.text();
-    const assignments = parseMoodleIcs(rawIcs);
+    const rawAssignments = parseMoodleIcs(rawIcs);
+    const assignments = await enrichAssignmentsWithAi(context.env, rawAssignments);
 
     return new Response(
       JSON.stringify({

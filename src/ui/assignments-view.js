@@ -120,10 +120,21 @@ export function renderAssignments(items, options = {}) {
 
     const examBadgeHtml = isExam
       ? `<span class="exam-tag">Examen</span>`
+      : (item.aiSummary?.source === 'ai' ? `<span class="exam-tag" style="background: linear-gradient(135deg, #f59e0b, #d97706); color: #fff;">⚡ IA</span>` : '');
+
+    const summaryText = isExam
+      ? (item.notes || '')
+      : (item.aiSummary?.short || item.description || '');
+
+    const notesHtml = summaryText
+      ? `<p class="assignment-notes">${escapeHtml(summaryText)}</p>`
       : '';
 
-    const notesHtml = (isExam && item.notes)
-      ? `<p class="assignment-notes">${escapeHtml(item.notes)}</p>`
+    const deliverables = (!isExam && Array.isArray(item.aiSummary?.deliverables)) ? item.aiSummary.deliverables : [];
+    const deliverablesHtml = deliverables.length > 0
+      ? `<div class="assignment-deliverables-pills">
+           ${deliverables.map(ext => `<span class="deliverable-mini-pill">${escapeHtml(ext)}</span>`).join('')}
+         </div>`
       : '';
 
     const adminActionsHtml = (isExam && isAdmin)
@@ -148,6 +159,7 @@ export function renderAssignments(items, options = {}) {
         </div>
         <h3 class="assignment-title">${escapeHtml(cleanTitle)}</h3>
         ${notesHtml}
+        ${deliverablesHtml}
         <div class="assignment-footer">
           <div class="assignment-due">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20a8 8 0 100-16 8 8 0 000 16zm0-18a10 10 0 110 20 10 10 0 010-20zm.5 5v5.25l4.5 2.67-.75 1.23L11 13V7h1.5z"/></svg>
