@@ -250,18 +250,26 @@ function setupViewportObserver() {
 }
 
 /**
- * Registro tolerante y seguro del Service Worker.
+ * Registro tolerante y seguro del Service Worker con actualización automática.
  */
 function setupServiceWorker() {
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('./sw.js')
         .then(reg => {
-          console.info('Service Worker registrado correctamente:', reg.scope);
+          reg.update();
         })
         .catch(err => {
           console.warn('Registro de Service Worker omitido o fallido:', err);
         });
+    });
+
+    let refreshing = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!refreshing) {
+        refreshing = true;
+        window.location.reload();
+      }
     });
   }
 }

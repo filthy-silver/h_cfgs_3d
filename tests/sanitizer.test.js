@@ -1,12 +1,14 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { sanitizeUrl } from '../src/ui/assignments-view.js';
+import { sanitizeUrl, escapeHtml } from '../src/domain/sanitizer.js';
+import { sanitizeUrl as reexportedSanitizeUrl } from '../src/ui/assignments-view.js';
 
-describe('assignments-view.js · Sanitización de URLs contra XSS', () => {
+describe('sanitizer.js · Sanitización de URLs contra XSS', () => {
 
   it('permite URLs válidas bajo protocolo HTTPS', () => {
     const validHttps = 'https://aules.edu.gva.es/fp/mod/assign/view.php?id=12345';
     assert.equal(sanitizeUrl(validHttps), validHttps);
+    assert.equal(reexportedSanitizeUrl(validHttps), validHttps);
   });
 
   it('permite URLs válidas bajo protocolo HTTP', () => {
@@ -40,6 +42,12 @@ describe('assignments-view.js · Sanitización de URLs contra XSS', () => {
     assert.equal(sanitizeUrl(undefined), '');
     assert.equal(sanitizeUrl(''), '');
     assert.equal(sanitizeUrl('   '), '');
+  });
+
+  it('escapa entidades HTML con escapeHtml', () => {
+    assert.equal(escapeHtml('<script>alert("xss")</script>'), '&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;');
+    assert.equal(escapeHtml('Tom & Jerry'), 'Tom &amp; Jerry');
+    assert.equal(escapeHtml(null), '');
   });
 
 });

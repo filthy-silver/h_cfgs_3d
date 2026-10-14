@@ -6,11 +6,17 @@
 /manifest.json
   Cache-Control: public, max-age=3600
 
+/index.html
+  Cache-Control: public, max-age=0, must-revalidate
+
+/kanban.html
+  Cache-Control: public, max-age=0, must-revalidate
+
 /css/*
-  Cache-Control: public, max-age=86400, stale-while-revalidate=604800
+  Cache-Control: public, max-age=0, must-revalidate
 
 /src/*
-  Cache-Control: public, max-age=86400, stale-while-revalidate=604800
+  Cache-Control: public, max-age=0, must-revalidate
 
 /icon-*.png
   Cache-Control: public, max-age=2592000, immutable

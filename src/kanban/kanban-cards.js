@@ -5,22 +5,10 @@
  */
 
 import { SUBJECTS } from '../data/schedule.data.js';
-import { matchSubject, sanitizeUrl } from '../ui/assignments-view.js';
+import { matchSubject } from '../domain/subject-matcher.js';
+import { escapeHtml, sanitizeUrl } from '../domain/sanitizer.js';
 
-/**
- * Escapa caracteres HTML para prevenir inyecciones XSS.
- * @param {string} str
- * @returns {string}
- */
-export function escapeHtml(str) {
-  if (!str) return '';
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
-}
+export { escapeHtml };
 
 /**
  * Formatea fechas límite con cálculo de urgencia relativa.

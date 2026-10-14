@@ -415,6 +415,14 @@ function setupKanbanServiceWorker() {
           console.warn('[Kanban] SW registro omitido o fallido:', err);
         });
     });
+
+    let refreshing = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!refreshing) {
+        refreshing = true;
+        window.location.reload();
+      }
+    });
   }
 }
 

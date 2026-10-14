@@ -3,20 +3,22 @@
  * @description Service Worker con estrategia Network-First para navegación y Stale-While-Revalidate para recursos estáticos.
  */
 
-const CACHE_NAME = 'horario-v8';
+const CACHE_NAME = 'horario-v9';
 
 const STATIC_ASSETS = [
   './',
   './index.html',
+  './kanban.html',
   './manifest.json',
   './icon-192.png',
   './icon-512.png',
   './css/styles.css',
   './css/kanban.css',
-  './kanban.html',
   './src/main.js',
   './src/data/schedule.data.js',
   './src/domain/time-tracker.js',
+  './src/domain/sanitizer.js',
+  './src/domain/subject-matcher.js',
   './src/ui/table-view.js',
   './src/ui/timeline-view.js',
   './src/ui/theme.js',
@@ -33,8 +35,19 @@ const STATIC_ASSETS = [
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(STATIC_ASSETS);
+    caches.open(CACHE_NAME).then(async (cache) => {
+      // Usar cache: 'reload' para forzar la descarga fresca desde la red y evitar HTTP cache antiguo
+      const cachePromises = STATIC_ASSETS.map(async (url) => {
+        try {
+          const response = await fetch(new Request(url, { cache: 'reload' }));
+          if (response && response.ok) {
+            await cache.put(url, response);
+          }
+        } catch (err) {
+          console.warn('[SW] Fallo al precachear recurso:', url, err);
+        }
+      });
+      await Promise.all(cachePromises);
     })
   );
   self.skipWaiting();
@@ -46,6 +59,7 @@ self.addEventListener('activate', (event) => {
       return Promise.all(
         keys.map((key) => {
           if (key !== CACHE_NAME) {
+            console.info('[SW] Eliminando caché obsoleta:', key);
             return caches.delete(key);
           }
         })
@@ -64,7 +78,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 2. Navegación (HTML de páginas): Network-First con fallback a Caché offline
+  // 2. Navegación (HTML de páginas): Network-First con fallback a la página correspondiente
   if (event.request.mode === 'navigate') {
     event.respondWith(
       fetch(event.request)
@@ -75,10 +89,18 @@ self.addEventListener('fetch', (event) => {
           }
           return networkResponse;
         })
-        .catch(() => {
-          return caches.match(event.request).then((cached) => {
-            return cached || caches.match('./index.html');
-          });
+        .catch(async () => {
+          const cached = await caches.match(event.request);
+          if (cached) return cached;
+
+          // Si la ruta solicitada corresponde al tablero Kanban (/kanban o /kanban.html)
+          if (url.pathname.includes('kanban')) {
+            const kanbanCached = await caches.match('./kanban.html');
+            if (kanbanCached) return kanbanCached;
+          }
+
+          // Fallback predeterminado al horario principal
+          return (await caches.match('./index.html')) || (await caches.match('./'));
         })
     );
     return;
