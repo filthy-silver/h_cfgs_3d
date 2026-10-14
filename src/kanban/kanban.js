@@ -120,12 +120,13 @@ async function loadUnifiedData() {
   const examItems = examsResult.status === 'fulfilled' ? examsResult.value : [];
   const personalTasks = getPersonalTasks();
 
+  const isDemo = window.location.search.includes('demo=1');
   const fetchedItems = [...aulesItems, ...examItems];
 
-  // Si no hay datos de red ni exámenes de servidor, usar los mock de respaldo
-  if (fetchedItems.length === 0 && personalTasks.length === 0) {
+  // Las tareas demo de respaldo SOLO se activan si se solicita explícitamente con ?demo=1
+  if (isDemo && fetchedItems.length === 0 && personalTasks.length === 0) {
     allItems = [...FALLBACK_ITEMS];
-  } else if (fetchedItems.length === 0) {
+  } else if (isDemo && fetchedItems.length === 0) {
     allItems = [...FALLBACK_ITEMS, ...personalTasks];
   } else {
     allItems = [...fetchedItems, ...personalTasks];

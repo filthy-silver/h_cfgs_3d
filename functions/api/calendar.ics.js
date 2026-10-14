@@ -45,6 +45,52 @@ function formatIcsTime(anchorDate, timeStr) {
   return `${anchorDate}T${h}${m}00`;
 }
 
+/**
+ * Pliega líneas iCalendar según RFC 5545 §3.1 (máximo 75 octetos por línea,
+ * continuaciones precedidas por un espacio en blanco).
+ * @param {string} line
+ * @returns {string}
+ */
+export function foldIcsLine(line) {
+  const maxBytes = 75;
+  const encoder = new TextEncoder();
+  const bytes = encoder.encode(line);
+
+  if (bytes.length <= maxBytes) {
+    return line;
+  }
+
+  const parts = [];
+  let currentStart = 0;
+  let isFirstLine = true;
+
+  while (currentStart < line.length) {
+    const limit = isFirstLine ? 75 : 74;
+    let end = currentStart;
+    let byteCount = 0;
+
+    while (end < line.length) {
+      const charBytes = encoder.encode(line[end]).length;
+      if (byteCount + charBytes > limit) {
+        break;
+      }
+      byteCount += charBytes;
+      end++;
+    }
+
+    if (end === currentStart) {
+      end = currentStart + 1;
+    }
+
+    const chunk = line.slice(currentStart, end);
+    parts.push(isFirstLine ? chunk : ` ${chunk}`);
+    isFirstLine = false;
+    currentStart = end;
+  }
+
+  return parts.join("\r\n");
+}
+
 export function generateIcsFeed() {
   const lines = [
     "BEGIN:VCALENDAR",
@@ -116,7 +162,7 @@ export function generateIcsFeed() {
   }
 
   lines.push("END:VCALENDAR");
-  return lines.join("\r\n");
+  return lines.map(foldIcsLine).join("\r\n");
 }
 
 export async function onRequest(context) {

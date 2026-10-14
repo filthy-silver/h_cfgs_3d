@@ -48,9 +48,33 @@ export default {
       });
     }
 
-    // Si se despliega con assets estáticos
+    // Bloqueo de archivos sensibles y código backend para que no se expongan como assets estáticos
+    const SENSITIVE_PATTERNS = [
+      /^\/\.dev\.vars/i,
+      /^\/\.git/i,
+      /^\/wrangler\.toml/i,
+      /^\/package\.json/i,
+      /^\/_headers/i,
+      /^\/worker\//i,
+      /^\/functions\//i
+    ];
+    if (SENSITIVE_PATTERNS.some(pattern => pattern.test(url.pathname))) {
+      return new Response('Not Found', { status: 404 });
+    }
+
+    // Si se despliega con assets estáticos (con cabeceras de seguridad forzadas)
     if (env.ASSETS) {
-      return env.ASSETS.fetch(request);
+      const response = await env.ASSETS.fetch(request);
+      const headers = new Headers(response.headers);
+      headers.set('X-Content-Type-Options', 'nosniff');
+      headers.set('X-Frame-Options', 'DENY');
+      headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+
+      return new Response(response.body, {
+        status: response.status,
+        statusText: response.statusText,
+        headers
+      });
     }
 
     return new Response('Not Found', { status: 404 });

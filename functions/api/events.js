@@ -11,16 +11,7 @@ const CORS_HEADERS = {
 };
 
 // Almacenamiento en memoria como fallback si no se configura KV
-let inMemoryExams = [
-  {
-    id: "exam-sample-1",
-    title: "Examen Parcial: Principios de Animación y Rigging",
-    mod: "anim",
-    date: "2026-10-28",
-    time: "17:35",
-    notes: "Aula INF-1 · Bloque 1 y 2"
-  }
-];
+let inMemoryExams = [];
 
 /**
  * Obtiene el listado de exámenes de KV o memoria fallback.
@@ -59,15 +50,25 @@ async function saveStoredExams(env, exams) {
 }
 
 /**
- * Valida el PIN recibido contra la variable de entorno ADMIN_PIN o '1234' por defecto.
+ * Valida el PIN recibido contra la variable de entorno ADMIN_PIN.
+ * Rechaza la petición si ADMIN_PIN no está configurado en el servidor para evitar contraseñas por defecto.
  * @param {Request} request
  * @param {Object} env
- * @returns {boolean}
+ * @returns {{ valid: boolean, error?: string }}
  */
-function isPinValid(request, env) {
+function validatePin(request, env) {
+  const serverPin = env?.ADMIN_PIN ? String(env.ADMIN_PIN).trim() : null;
+  if (!serverPin) {
+    console.error('[Events API] ADMIN_PIN no está configurado en el entorno de Cloudflare.');
+    return { valid: false, error: 'ADMIN_PIN no está configurado en las variables de entorno de Cloudflare.' };
+  }
+
   const headerPin = request.headers.get('X-Admin-Pin');
-  const serverPin = (env && env.ADMIN_PIN) ? String(env.ADMIN_PIN).trim() : '1234';
-  return Boolean(headerPin && headerPin.trim() === serverPin);
+  if (!headerPin || headerPin.trim() !== serverPin) {
+    return { valid: false, error: 'PIN de profesor o delegado incorrecto' };
+  }
+
+  return { valid: true };
 }
 
 /**
@@ -141,10 +142,11 @@ export async function onRequest(context) {
   }
 
   // 3. Verificación de PIN para operaciones de mutación (POST, DELETE)
-  if (!isPinValid(request, env)) {
+  const pinAuth = validatePin(request, env);
+  if (!pinAuth.valid) {
     return new Response(JSON.stringify({
       success: false,
-      error: 'PIN de profesor o delegado incorrecto'
+      error: pinAuth.error
     }), {
       status: 401,
       headers: { 'Content-Type': 'application/json; charset=utf-8', ...CORS_HEADERS }

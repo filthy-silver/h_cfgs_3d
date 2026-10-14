@@ -5,7 +5,7 @@
  */
 
 import { SUBJECTS } from '../data/schedule.data.js';
-import { matchSubject } from '../ui/assignments-view.js';
+import { matchSubject, sanitizeUrl } from '../ui/assignments-view.js';
 
 /**
  * Escapa caracteres HTML para prevenir inyecciones XSS.
@@ -161,8 +161,9 @@ export function renderCardHtml(item, currentColumn) {
     : '';
 
   // Enlace externo (Aules)
-  const aulesLinkHtml = (isAules && item.url)
-    ? `<a href="${item.url}" target="_blank" rel="noopener noreferrer" class="card-link" title="Abrir entrega en Moodle Aules">
+  const safeAulesUrl = (isAules && item.url) ? sanitizeUrl(item.url) : '';
+  const aulesLinkHtml = safeAulesUrl
+    ? `<a href="${safeAulesUrl}" target="_blank" rel="noopener noreferrer" class="card-link" title="Abrir entrega en Moodle Aules">
         <span>Aules</span>
         <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true">
           <path fill="currentColor" d="M14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3m-2 16H5V5h7V3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7h-2v7z"/>

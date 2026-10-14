@@ -45,18 +45,53 @@ function parseIcsDate(dateStr) {
     return new Date(Date.UTC(+y, +m - 1, +d, +h, +min, +s));
   }
 
-  // Formato local: YYYYMMDDTHHMMSS
+  // Formato local: YYYYMMDDTHHMMSS (interpretar en hora peninsular española Europe/Madrid)
   const matchLocal = cleanStr.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})$/);
   if (matchLocal) {
     const [, y, m, d, h, min, s] = matchLocal;
-    return new Date(+y, +m - 1, +d, +h, +min, +s);
+    // Calcular el desfase de Madrid (CET UTC+1 o CEST UTC+2) para esa fecha
+    const approxUtc = new Date(Date.UTC(+y, +m - 1, +d, +h, +min, +s));
+    let offsetMinutes = 60; // Por defecto invierno UTC+1
+    try {
+      const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Europe/Madrid',
+        year: 'numeric', month: 'numeric', day: 'numeric',
+        hour: 'numeric', minute: 'numeric', second: 'numeric',
+        hourCycle: 'h23'
+      }).formatToParts(approxUtc);
+      const p = {};
+      for (const part of parts) p[part.type] = parseInt(part.value, 10);
+      const madridEpoch = Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second);
+      offsetMinutes = (madridEpoch - approxUtc.getTime()) / (60 * 1000);
+    } catch {
+      // Fallback
+    }
+    const realUtcMs = Date.UTC(+y, +m - 1, +d, +h, +min, +s) - (offsetMinutes * 60 * 1000);
+    return new Date(realUtcMs);
   }
 
-  // Formato sólo fecha: YYYYMMDD
+  // Formato sólo fecha: YYYYMMDD (final del día en hora peninsular)
   const matchDay = cleanStr.match(/^(\d{4})(\d{2})(\d{2})$/);
   if (matchDay) {
     const [, y, m, d] = matchDay;
-    return new Date(+y, +m - 1, +d, 23, 59, 59);
+    const approxUtc = new Date(Date.UTC(+y, +m - 1, +d, 23, 59, 59));
+    let offsetMinutes = 60;
+    try {
+      const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Europe/Madrid',
+        year: 'numeric', month: 'numeric', day: 'numeric',
+        hour: 'numeric', minute: 'numeric', second: 'numeric',
+        hourCycle: 'h23'
+      }).formatToParts(approxUtc);
+      const p = {};
+      for (const part of parts) p[part.type] = parseInt(part.value, 10);
+      const madridEpoch = Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second);
+      offsetMinutes = (madridEpoch - approxUtc.getTime()) / (60 * 1000);
+    } catch {
+      // Fallback
+    }
+    const realUtcMs = Date.UTC(+y, +m - 1, +d, 23, 59, 59) - (offsetMinutes * 60 * 1000);
+    return new Date(realUtcMs);
   }
 
   return null;
@@ -144,8 +179,9 @@ function parseMoodleIcs(rawIcs) {
   return assignments
     .map(event => {
       const targetDate = event.dueDate || event.startDate;
+      const stableId = (event.title || 'task').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 24);
       return {
-        id: event.id || `aules-${Math.random().toString(36).slice(2)}`,
+        id: event.id || `aules-${stableId}-${targetDate ? targetDate.getTime() : 0}`,
         title: event.title || 'Entrega pendiente',
         description: event.description || '',
         category: event.category || '',
