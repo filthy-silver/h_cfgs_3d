@@ -7,6 +7,13 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { onRequest } from '../functions/api/chat-invites.js';
+import {
+  generateIdentityKeyPair,
+  exportKeyPair,
+  getFingerprint,
+  signPayload,
+  GENESIS_ADMIN_ROOT_FINGERPRINT
+} from '../src/chat/crypto.js';
 
 describe('chat-invites.js · Árbol de Invitaciones y Cadena de Confianza', () => {
 
@@ -197,6 +204,86 @@ describe('chat-invites.js · Árbol de Invitaciones y Cadena de Confianza', () =
     // Tanto B como C deben estar en los afectados suspendidos
     assert.ok(cascadeData.affectedUsers.includes('user_b'));
     assert.ok(cascadeData.affectedUsers.includes('user_c'));
+  });
+
+  it('valida la firma digital ECDSA en la creación de invitaciones (Anti-Spoofing)', async () => {
+    const creatorKey = await generateIdentityKeyPair();
+    const { publicSpki } = await exportKeyPair(creatorKey);
+    const creatorFp = await getFingerprint(publicSpki);
+
+    const timestamp = Date.now();
+    const signature = await signPayload(
+      creatorKey.privateKey,
+      { action: 'create', creatorFingerprint: creatorFp, targetLabel: 'Alumno Nuevo', timestamp }
+    );
+
+    const { context } = createMockContext('POST', 'http://localhost/api/chat/invites', {
+      action: 'create',
+      creatorFingerprint: creatorFp,
+      creatorPublicSpki: publicSpki,
+      creatorLabel: 'Profesor',
+      targetLabel: 'Alumno Nuevo',
+      timestamp,
+      signature
+    });
+
+    const res = await onRequest(context);
+    const data = await res.json();
+
+    assert.equal(res.status, 201);
+    assert.equal(data.success, true);
+    assert.match(data.code, /^INV-[A-Z0-9]{6}$/);
+    assert.equal(data.remainingQuota, 1);
+  });
+
+  it('rechaza la creación de invitaciones si la huella no coincide con la clave pública SPKI', async () => {
+    const creatorKey = await generateIdentityKeyPair();
+    const { publicSpki } = await exportKeyPair(creatorKey);
+
+    const timestamp = Date.now();
+    const signature = await signPayload(
+      creatorKey.privateKey,
+      { action: 'create', creatorFingerprint: 'victima_falsa', targetLabel: 'Alumno', timestamp }
+    );
+
+    const { context } = createMockContext('POST', 'http://localhost/api/chat/invites', {
+      action: 'create',
+      creatorFingerprint: 'victima_falsa',
+      creatorPublicSpki: publicSpki,
+      creatorLabel: 'Atacante',
+      targetLabel: 'Alumno',
+      timestamp,
+      signature
+    });
+
+    const res = await onRequest(context);
+    const data = await res.json();
+
+    assert.equal(res.status, 401);
+    assert.equal(data.success, false);
+    assert.match(data.error, /no coincide con la clave pública/i);
+  });
+
+  it('rechaza la revocación en cascada de atacantes no autorizados y la aprueba con adminSecret', async () => {
+    const { context: unauthCtx } = createMockContext('POST', 'http://localhost/api/chat/invites', {
+      action: 'revoke_cascade',
+      targetFingerprint: 'usuario_inocente',
+      adminSecret: 'clave_invalida_123'
+    });
+
+    const unauthRes = await onRequest(unauthCtx);
+    assert.equal(unauthRes.status, 403);
+
+    const { context: authCtx } = createMockContext('POST', 'http://localhost/api/chat/invites', {
+      action: 'revoke_cascade',
+      targetFingerprint: 'usuario_infractor',
+      adminSecret: 'filthysilver3d'
+    });
+
+    const authRes = await onRequest(authCtx);
+    const authData = await authRes.json();
+    assert.equal(authRes.status, 200);
+    assert.equal(authData.success, true);
   });
 
 });
