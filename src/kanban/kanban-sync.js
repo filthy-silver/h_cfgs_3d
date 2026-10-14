@@ -147,11 +147,7 @@ export function initKanbanSync({ onDataRestored } = {}) {
   const formClaim = document.getElementById('form-sync-claim');
   const inputPin = document.getElementById('input-claim-pin');
   const btnRegen = document.getElementById('btn-regen-pin');
-  const btnCopyLink = document.getElementById('btn-copy-sync-link');
   const btnConfirmIncoming = document.getElementById('btn-confirm-incoming-sync');
-  const btnToggleQr = document.getElementById('btn-toggle-qr');
-  const qrWrapper = document.getElementById('sync-qr-wrapper');
-  const btnToggleQrText = document.getElementById('btn-toggle-qr-text');
 
   // Delegación global en document para garantizar compatibilidad táctil / móvil
   document.addEventListener('click', (e) => {
@@ -159,6 +155,13 @@ export function initKanbanSync({ onDataRestored } = {}) {
     if (e.target.closest('#btn-open-sync')) {
       e.preventDefault();
       openSyncModal();
+      return;
+    }
+
+    // Copiar enlace directo instantáneo
+    if (e.target.closest('#btn-copy-sync-link')) {
+      e.preventDefault();
+      copyDirectSyncLink();
       return;
     }
 
@@ -202,30 +205,6 @@ export function initKanbanSync({ onDataRestored } = {}) {
       if (modal?.classList.contains('is-open')) closeSyncModal();
       const incomingModal = document.getElementById('incoming-sync-modal');
       if (incomingModal?.classList.contains('is-open')) closeIncomingSyncModal();
-    }
-  });
-
-  // Botón: Copiar enlace directo instantáneo
-  btnCopyLink?.addEventListener('click', () => {
-    copyDirectSyncLink();
-  });
-
-  // Botón: Alternar visualización del código QR
-  btnToggleQr?.addEventListener('click', () => {
-    if (!qrWrapper) return;
-    const isHidden = qrWrapper.classList.contains('is-hidden');
-    if (isHidden) {
-      if (!currentDirectLink) {
-        const payload = exportAllKanbanData();
-        const token = encodeSyncPayload(payload);
-        currentDirectLink = `${window.location.origin}${window.location.pathname}#sync=${token}`;
-      }
-      renderQrCode(currentDirectLink);
-      qrWrapper.classList.remove('is-hidden');
-      if (btnToggleQrText) btnToggleQrText.textContent = 'Ocultar QR';
-    } else {
-      qrWrapper.classList.add('is-hidden');
-      if (btnToggleQrText) btnToggleQrText.textContent = 'Ver QR';
     }
   });
 
@@ -346,12 +325,10 @@ async function requestNewPin() {
   const token = encodeSyncPayload(payload);
   currentDirectLink = `${window.location.origin}${window.location.pathname}#sync=${token}`;
 
-  const qrWrapper = document.getElementById('sync-qr-wrapper');
-  if (qrWrapper && !qrWrapper.classList.contains('is-hidden')) {
-    renderQrCode(currentDirectLink);
-  }
+  // 2. Renderizar código QR visible al instante
+  renderQrCode(currentDirectLink);
 
-  // 2. Intentar registrar PIN temporal en Cloudflare API
+  // 3. Intentar registrar PIN temporal en Cloudflare API
   try {
     const res = await fetch('/api/sync', {
       method: 'POST',
@@ -473,15 +450,31 @@ function renderQrCode(url) {
   if (!container || !url) return;
   container.innerHTML = '';
   try {
-    const svgEl = QRCode({
+    const qrFn = typeof QRCode === 'function' ? QRCode : (QRCode?.QRCode || QRCode?.default);
+    if (typeof qrFn !== 'function') {
+      throw new Error('Función QRCode no resuelta');
+    }
+    const svgEl = qrFn({
       msg: url,
-      dim: 170,
+      dim: 180,
       pad: 2,
-      pal: ['#101828', '#ffffff']
+      pal: ['#0f172a', '#ffffff']
     });
-    container.appendChild(svgEl);
+
+    if (svgEl) {
+      // Blindaje contra variables CSS y Dark Mode: fijar fills explícitos en los paths
+      const paths = svgEl.querySelectorAll('path');
+      if (paths.length >= 2) {
+        paths[0].setAttribute('fill', '#ffffff');
+        paths[1].setAttribute('fill', '#0f172a');
+      } else if (paths.length === 1) {
+        paths[0].setAttribute('fill', '#0f172a');
+      }
+      container.appendChild(svgEl);
+    }
   } catch (err) {
     console.warn('[KanbanSync] Error al renderizar código QR:', err);
+    container.innerHTML = '<span style="font-size:0.75rem;color:var(--muted)">Usa el botón "Copiar enlace" o el código PIN</span>';
   }
 }
 
@@ -492,14 +485,10 @@ function resetShareView() {
   const contentEl = document.getElementById('sync-share-content');
   const successEl = document.getElementById('sync-share-success');
   const feedbackEl = document.getElementById('copy-sync-feedback');
-  const qrWrapper = document.getElementById('sync-qr-wrapper');
-  const btnToggleQrText = document.getElementById('btn-toggle-qr-text');
 
   if (contentEl) contentEl.classList.remove('is-hidden');
   if (successEl) successEl.classList.add('is-hidden');
   if (feedbackEl) feedbackEl.classList.add('is-hidden');
-  if (qrWrapper) qrWrapper.classList.add('is-hidden');
-  if (btnToggleQrText) btnToggleQrText.textContent = 'Ver QR';
 }
 
 /**
