@@ -7,10 +7,16 @@ import { generateIcsFeed } from '../functions/api/calendar.ics.js';
 import { onRequest as handleAulesRequest } from '../functions/api/aules.js';
 import { onRequest as handleEventsRequest } from '../functions/api/events.js';
 import { onRequest as handleSyncRequest } from '../functions/api/sync.js';
+import { onRequest as handleChatInvitesRequest } from '../functions/api/chat-invites.js';
 
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+
+    // Endpoint del Árbol de Invitaciones y Trazabilidad del Chat P2P
+    if (url.pathname === '/api/chat/invites' || url.pathname.startsWith('/api/chat/invites/')) {
+      return handleChatInvitesRequest({ request, env, ctx });
+    }
 
     // Endpoint de sincronización y emparejamiento (Pairing Handshake)
     if (url.pathname === '/api/sync' || url.pathname.startsWith('/api/sync/')) {

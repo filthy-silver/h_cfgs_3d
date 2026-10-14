@@ -4,7 +4,15 @@
  * descentralizada multi-estrategia (BroadcastChannel local, Trackers públicos y relays Nostr).
  */
 
-import { signPayload, verifyPayload } from './crypto.js';
+import {
+  signPayload,
+  verifyPayload,
+  computeFileHash,
+  createFileAuthorshipCertificate,
+  verifyFileAuthorshipCertificate,
+  bufferToBase64,
+  base64ToBuffer
+} from './crypto.js';
 
 // Servidores STUN públicos y gratuitos de alta disponibilidad
 const DEFAULT_ICE_SERVERS = [
@@ -31,6 +39,8 @@ export class P2PMeshRoom {
    * @param {Function} [options.onMessage] - Callback al recibir mensaje
    * @param {Function} [options.onProfileUpdate] - Callback al cambiar apodo de un compañero
    * @param {Function} [options.onStatusChange] - Callback sobre estado de conexión
+   * @param {Function} [options.onFileReceived] - Callback al recibir un archivo P2P
+   * @param {Function} [options.onFileProgress] - Callback de progreso de transferencia de archivo
    */
   constructor(options) {
     this.roomId = options.roomId;
@@ -44,10 +54,13 @@ export class P2PMeshRoom {
     this.onStatusChange = options.onStatusChange || (() => {});
     this.onMessageDeleted = options.onMessageDeleted || (() => {});
     this.onKicked = options.onKicked || (() => {});
+    this.onFileReceived = options.onFileReceived || (() => {});
+    this.onFileProgress = options.onFileProgress || (() => {});
 
     // Mapa de compañeros: peerId -> { peerConnection, dataChannel, profile }
     this.peers = new Map();
     this.peerMessageTimestamps = new Map(); // Para control anti-spam / rate-limiting
+    this.incomingFileTransfers = new Map(); // fileId -> { meta, chunks }
 
     // Soporte para pruebas locales instantáneas entre pestañas (BroadcastChannel nativo)
     this.broadcastChannel = null;
@@ -467,6 +480,72 @@ export class P2PMeshRoom {
       }
       return;
     }
+
+    // 5. Transferencia de archivos P2P (FileDrop con certificación de autoría)
+    if (packet.type === 'FILE_START') {
+      this.incomingFileTransfers.set(packet.fileId, {
+        meta: packet,
+        receivedChunks: new Map(),
+        totalChunks: packet.totalChunks,
+        fileHash: packet.fileHash
+      });
+      return;
+    }
+
+    if (packet.type === 'FILE_CHUNK') {
+      const transfer = this.incomingFileTransfers.get(packet.fileId);
+      if (transfer) {
+        transfer.receivedChunks.set(packet.chunkIndex, base64ToBuffer(packet.data));
+        this.onFileProgress(packet.fileId, transfer.receivedChunks.size / transfer.totalChunks);
+      }
+      return;
+    }
+
+    if (packet.type === 'FILE_END') {
+      const transfer = this.incomingFileTransfers.get(packet.fileId);
+      if (transfer && transfer.receivedChunks.size === transfer.totalChunks) {
+        let totalLen = 0;
+        for (let i = 0; i < transfer.totalChunks; i++) {
+          totalLen += transfer.receivedChunks.get(i).byteLength;
+        }
+
+        const assembled = new Uint8Array(totalLen);
+        let offset = 0;
+        for (let i = 0; i < transfer.totalChunks; i++) {
+          const chunkBuf = new Uint8Array(transfer.receivedChunks.get(i));
+          assembled.set(chunkBuf, offset);
+          offset += chunkBuf.byteLength;
+        }
+
+        const actualHash = await computeFileHash(assembled.buffer);
+        const isValidHash = (actualHash === transfer.meta.fileHash);
+
+        let authorshipInfo = { valid: false };
+        if (transfer.meta.authorshipCertificate) {
+          authorshipInfo = await verifyFileAuthorshipCertificate(transfer.meta.authorshipCertificate, transfer.meta.fileHash);
+        }
+
+        const blob = new Blob([assembled.buffer], { type: transfer.meta.mimeType || 'application/octet-stream' });
+        const blobUrl = URL.createObjectURL(blob);
+
+        this.onFileReceived({
+          fileId: transfer.meta.fileId,
+          fileName: transfer.meta.fileName,
+          fileSize: transfer.meta.fileSize,
+          mimeType: transfer.meta.mimeType,
+          fileHash: transfer.meta.fileHash,
+          blobUrl,
+          isValidHash,
+          authorship: authorshipInfo,
+          fromPeerId,
+          fromNickname: peerObj?.profile.nickname || `Peer#${fromPeerId.slice(0, 4)}`,
+          timestamp: transfer.meta.timestamp || Date.now()
+        });
+
+        this.incomingFileTransfers.delete(packet.fileId);
+      }
+      return;
+    }
   }
 
   /**
@@ -602,6 +681,75 @@ export class P2PMeshRoom {
     };
     this._broadcastPacket(packet);
     this._handlePeerDisconnected(targetPeerId);
+  }
+
+  /**
+   * Envía un archivo P2P a todos los compañeros en trozos de 16KB
+   * con certificado de autoría firmado digitalmente.
+   * @param {File|Blob} file
+   * @returns {Promise<Object>} Datos del archivo enviado
+   */
+  async sendFile(file) {
+    const arrayBuffer = await file.arrayBuffer();
+    const fileHash = await computeFileHash(arrayBuffer);
+    const authorshipCertificate = await createFileAuthorshipCertificate(
+      fileHash,
+      file.name,
+      file.size,
+      this.identity.privateKey,
+      this.identity.publicSpki,
+      this.identity.nickname
+    );
+
+    const fileId = `file_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+    const CHUNK_SIZE = 16 * 1024; // 16 KB por trozo
+    const totalChunks = Math.ceil(arrayBuffer.byteLength / CHUNK_SIZE);
+
+    // 1. Emitir metadatos y certificado
+    this._broadcastPacket({
+      type: 'FILE_START',
+      fileId,
+      fileName: file.name,
+      fileSize: file.size,
+      mimeType: file.type || 'application/octet-stream',
+      fileHash,
+      totalChunks,
+      authorshipCertificate,
+      fromPeerId: this.peerId,
+      fromNickname: this.identity.nickname,
+      timestamp: Date.now()
+    });
+
+    // 2. Transmitir trozos
+    for (let i = 0; i < totalChunks; i++) {
+      const start = i * CHUNK_SIZE;
+      const end = Math.min(start + CHUNK_SIZE, arrayBuffer.byteLength);
+      const chunkBuf = arrayBuffer.slice(start, end);
+
+      this._broadcastPacket({
+        type: 'FILE_CHUNK',
+        fileId,
+        chunkIndex: i,
+        data: bufferToBase64(chunkBuf)
+      });
+    }
+
+    // 3. Emitir fin de transmisión
+    this._broadcastPacket({
+      type: 'FILE_END',
+      fileId
+    });
+
+    return {
+      fileId,
+      fileName: file.name,
+      fileSize: file.size,
+      mimeType: file.type,
+      fileHash,
+      authorshipCertificate,
+      timestamp: Date.now(),
+      fromNickname: this.identity.nickname
+    };
   }
 
   /**

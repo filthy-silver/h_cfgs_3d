@@ -2,7 +2,9 @@
  * @file src/chat/app.js
  * @description Controlador principal de la interfaz de usuario para el Chat P2P Descentralizado.
  * Incluye soporte para rutas limpias (/chat/:room), directorio de salas oficiales,
- * herramientas de moderación criptográfica (Kicks y Borrados de mensajes) y tokens de invitación.
+ * herramientas de moderación criptográfica (Kicks y Borrados de mensajes), tokens de invitación,
+ * árbol de invitaciones trazables con cupos por alumno, y transferencia P2P de archivos (FileDrop)
+ * con Certificado Criptográfico de Autoría (Proof of Authorship).
  */
 
 import {
@@ -14,7 +16,8 @@ import {
   bytesToMnemonic,
   mnemonicToBytes,
   generateInviteToken,
-  verifyInviteToken
+  verifyInviteToken,
+  computeFileHash
 } from './crypto.js';
 
 import {
@@ -65,6 +68,10 @@ const elements = {
   btnShareRoom: document.getElementById('btn-share-room'),
   btnSwitchRoom: document.getElementById('btn-switch-room'),
 
+  // Transferencia de archivos
+  fileInput: document.getElementById('file-input'),
+  btnAttachFile: document.getElementById('btn-attach-file'),
+
   // Modales
   identityModal: document.getElementById('identity-modal'),
   shareModal: document.getElementById('share-modal'),
@@ -91,6 +98,15 @@ const elements = {
   inviteTokenContainer: document.getElementById('invite-token-container'),
   inviteTokenOutput: document.getElementById('invite-token-output'),
   btnCopyInviteToken: document.getElementById('btn-copy-invite-token'),
+
+  // Árbol de invitaciones y cupos trazables
+  inviteTreeSummary: document.getElementById('invite-tree-summary'),
+  targetGuestInput: document.getElementById('target-guest-input'),
+  btnCreateQuotaInvite: document.getElementById('btn-create-quota-invite'),
+  issuedInvitesContainer: document.getElementById('issued-invites-container'),
+  issuedInvitesList: document.getElementById('issued-invites-list'),
+  claimInviteInput: document.getElementById('claim-invite-input'),
+  btnClaimInviteCode: document.getElementById('btn-claim-invite-code'),
 
   // Modal de cambio de sala
   newRoomInput: document.getElementById('new-room-input'),
@@ -230,7 +246,6 @@ function updateIdentityUi() {
  */
 export function getRoomIdFromLocation() {
   const pathParts = window.location.pathname.split('/').filter(Boolean);
-  // Si la ruta es /chat/sala o /chat.html
   if (pathParts.length >= 2 && pathParts[0] === 'chat') {
     return pathParts[1].toLowerCase().replace(/[^a-z0-9_-]/g, '-');
   }
@@ -252,7 +267,7 @@ function setupRoomFromUrl() {
 }
 
 /**
- * Entra en una sala P2P específica y enlaza eventos de red y moderación.
+ * Entra en una sala P2P específica y enlaza eventos de red, archivos y moderación.
  * @param {string} roomId
  */
 function joinRoom(roomId) {
@@ -274,7 +289,7 @@ function joinRoom(roomId) {
   updatePeersListUi();
   renderRoomHistory(roomId);
 
-  // Instanciar motor de red P2P con soporte para moderación
+  // Instanciar motor de red P2P con soporte para moderación y FileDrop
   state.roomInstance = new P2PMeshRoom({
     roomId,
     identity: state.identity,
@@ -306,6 +321,13 @@ function joinRoom(roomId) {
     onKicked: (reason) => {
       state.isKicked = true;
       showKickedUi(reason);
+    },
+    onFileReceived: (fileData) => {
+      appendFileBubble(fileData, false);
+      appendRoomHistory(state.currentRoomId, { ...fileData, isFile: true, isMe: false });
+    },
+    onFileProgress: (fileId, progressRatio) => {
+      console.log(`[P2P File] Progreso ${fileId}: Math.round(progressRatio * 100)%`);
     }
   });
 }
@@ -403,6 +425,198 @@ function appendChatMessage(msg, isMe = false) {
 }
 
 /**
+ * Renderiza una burbuja de archivo transferido con Certificado de Autoría.
+ */
+function appendFileBubble(fileData, isMe = false) {
+  if (!elements.messagesFeed) return;
+
+  const msgDiv = document.createElement('div');
+  msgDiv.className = `chat-bubble-container ${isMe ? 'msg-outbound' : 'msg-inbound'}`;
+
+  const timeString = new Date(fileData.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const formattedSize = formatBytes(fileData.fileSize);
+  const shortHash = fileData.fileHash ? `${fileData.fileHash.slice(0, 10)}...${fileData.fileHash.slice(-6)}` : 'hash-ok';
+
+  msgDiv.innerHTML = `
+    <div class="chat-bubble">
+      <div class="msg-header">
+        <span class="msg-author">${escapeHtml(fileData.fromNickname)}</span>
+        <span class="msg-meta">
+          <time>${timeString}</time>
+        </span>
+      </div>
+      <div class="file-attachment-card">
+        <div class="file-header-row">
+          <span class="file-name-meta">📦 ${escapeHtml(fileData.fileName)}</span>
+          <span class="file-size-tag">${formattedSize}</span>
+        </div>
+
+        <div class="file-authorship-badge">
+          🛡️ Autoría Criptográfica Verificada: ${escapeHtml(fileData.fromNickname)}
+        </div>
+
+        <div class="file-hash-tag">
+          SHA-256: ${shortHash}
+        </div>
+
+        ${fileData.blobUrl ? `
+          <a href="${fileData.blobUrl}" download="${escapeHtml(fileData.fileName)}" class="btn-download-file">
+            ⬇️ Descargar archivo directo
+          </a>
+        ` : `
+          <div style="font-size: 0.75rem; color: var(--muted);">✓ Transferido a compañeros</div>
+        `}
+      </div>
+    </div>
+  `;
+
+  elements.messagesFeed.appendChild(msgDiv);
+  elements.messagesFeed.scrollTop = elements.messagesFeed.scrollHeight;
+}
+
+/**
+ * Procesa el envío de un archivo arrastrado o seleccionado.
+ */
+async function handleSendFile(file) {
+  if (!file || !state.roomInstance) return;
+  appendSystemMessage(`⏳ Calculando SHA-256 y firmando certificado de autoría para "${file.name}"...`);
+
+  try {
+    const sentMeta = await state.roomInstance.sendFile(file);
+    appendFileBubble(sentMeta, true);
+    appendRoomHistory(state.currentRoomId, { ...sentMeta, isFile: true, isMe: true });
+    appendSystemMessage(`✓ "${file.name}" transmitido por P2P con certificado de autoría.`);
+  } catch (err) {
+    alert(`Error enviando archivo: ${err.message}`);
+  }
+}
+
+/**
+ * Consulta y renderiza el árbol genealógico de invitaciones del usuario.
+ */
+async function loadUserInviteTree() {
+  if (!elements.inviteTreeSummary || !state.identity) return;
+
+  try {
+    elements.inviteTreeSummary.innerHTML = '<span>Consultando árbol de confianza en Cloudflare...</span>';
+    const res = await fetch(`/api/chat/invites?fingerprint=${state.identity.fingerprint}`);
+    const data = await res.json();
+
+    if (!data.success) {
+      elements.inviteTreeSummary.textContent = 'No se pudo cargar la información de linaje.';
+      return;
+    }
+
+    elements.inviteTreeSummary.innerHTML = `
+      <div style="display: flex; justify-content: space-between; margin-bottom: 0.25rem;">
+        <span><strong>Invitado por:</strong> ${escapeHtml(data.invitedByLabel || 'Génesis')}</span>
+        <span style="color: var(--accent); font-weight: 700;">Cupo restante: ${data.remainingQuota}</span>
+      </div>
+      <div style="font-size: 0.78rem; color: var(--muted);">
+        Total invitaciones asignadas: ${data.quota} · Usadas: ${data.usedCount}
+      </div>
+    `;
+
+    if (elements.issuedInvitesContainer && elements.issuedInvitesList) {
+      elements.issuedInvitesList.innerHTML = '';
+      if (data.invites && data.invites.length > 0) {
+        elements.issuedInvitesContainer.style.display = 'block';
+        data.invites.forEach(inv => {
+          const item = document.createElement('div');
+          item.className = 'invite-tree-item';
+          item.innerHTML = `
+            <span class="invite-code-pill">${inv.code}</span>
+            <span>Para: ${escapeHtml(inv.targetLabel)}</span>
+            <span class="invite-status-badge ${inv.used ? 'claimed' : ''}">
+              ${inv.used ? `✓ Canjeado (${escapeHtml(inv.usedByLabel)})` : 'Pendiente'}
+            </span>
+          `;
+          elements.issuedInvitesList.appendChild(item);
+        });
+      } else {
+        elements.issuedInvitesContainer.style.display = 'none';
+      }
+    }
+
+  } catch (err) {
+    console.warn('[Invite Tree] Error al consultar:', err);
+    elements.inviteTreeSummary.textContent = 'Servidor de invitaciones en modo local.';
+  }
+}
+
+/**
+ * Emite una nueva invitación consumiendo 1 del cupo del usuario.
+ */
+async function createQuotaInvite() {
+  const targetLabel = (elements.targetGuestInput?.value || '').trim();
+  if (!targetLabel) {
+    alert('Introduce el nombre del compañero al que vas a invitar.');
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/chat/invites', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'create',
+        creatorFingerprint: state.identity.fingerprint,
+        creatorLabel: state.identity.nickname,
+        targetLabel
+      })
+    });
+
+    const data = await res.json();
+    if (!data.success) {
+      alert(`No se pudo emitir la invitación: ${data.error}`);
+      return;
+    }
+
+    alert(`¡Invitación creada! Código: ${data.code}\nCompártelo con ${targetLabel}.`);
+    elements.targetGuestInput.value = '';
+    await loadUserInviteTree();
+  } catch (err) {
+    alert(`Error: ${err.message}`);
+  }
+}
+
+/**
+ * Canjea un código de invitación recibido.
+ */
+async function claimInviteCode() {
+  const code = (elements.claimInviteInput?.value || '').trim();
+  if (!code) {
+    alert('Introduce el código de invitación recibido (ej: INV-8F3B2A).');
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/chat/invites', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'claim',
+        code,
+        userFingerprint: state.identity.fingerprint,
+        nickname: state.identity.nickname
+      })
+    });
+
+    const data = await res.json();
+    if (!data.success) {
+      alert(`Error canjeando código: ${data.error}`);
+      return;
+    }
+
+    alert(`¡Código canjeado con éxito!\nHas sido registrado en la cadena de confianza.`);
+    elements.claimInviteInput.value = '';
+    await loadUserInviteTree();
+  } catch (err) {
+    alert(`Error: ${err.message}`);
+  }
+}
+
+/**
  * Maneja visualmente la eliminación de un mensaje por moderador.
  */
 function handleUiMessageDeleted(messageId) {
@@ -494,8 +708,12 @@ function renderRoomHistory(roomId) {
   const history = loadRoomHistory(roomId);
   if (history.length > 0) {
     appendSystemMessage('— Historial reciente de la sala —');
-    history.forEach(msg => {
-      appendChatMessage(msg, msg.isMe);
+    history.forEach(item => {
+      if (item.isFile) {
+        appendFileBubble(item, item.isMe);
+      } else {
+        appendChatMessage(item, item.isMe);
+      }
     });
   }
 }
@@ -504,7 +722,7 @@ function renderRoomHistory(roomId) {
  * Enlaza los eventos de usuario y formularios.
  */
 function bindEvents() {
-  // Envío de mensaje
+  // Envío de mensaje de texto
   if (elements.chatForm) {
     elements.chatForm.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -526,17 +744,52 @@ function bindEvents() {
     });
   }
 
+  // Adjuntar archivos con botón
+  elements.btnAttachFile?.addEventListener('click', () => {
+    elements.fileInput?.click();
+  });
+
+  elements.fileInput?.addEventListener('change', async (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      await handleSendFile(file);
+      elements.fileInput.value = '';
+    }
+  });
+
+  // Drag and Drop de archivos sobre el feed del chat
+  if (elements.messagesFeed) {
+    elements.messagesFeed.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      elements.messagesFeed.style.outline = '2px dashed var(--accent)';
+    });
+
+    elements.messagesFeed.addEventListener('dragleave', () => {
+      elements.messagesFeed.style.outline = 'none';
+    });
+
+    elements.messagesFeed.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      elements.messagesFeed.style.outline = 'none';
+      const file = e.dataTransfer?.files?.[0];
+      if (file) {
+        await handleSendFile(file);
+      }
+    });
+  }
+
   // Modales: Abrir y Cerrar
   elements.btnOpenIdentity?.addEventListener('click', () => {
     updateIdentityUi();
     openModal(elements.identityModal);
   });
 
-  elements.btnShareRoom?.addEventListener('click', () => {
+  elements.btnShareRoom?.addEventListener('click', async () => {
     const fullUrl = window.location.href;
     if (elements.shareLinkInput) {
       elements.shareLinkInput.value = fullUrl;
     }
+    await loadUserInviteTree();
     openModal(elements.shareModal);
   });
 
@@ -545,6 +798,10 @@ function bindEvents() {
     renderOfficialRoomsUi();
     openModal(elements.switchRoomModal);
   });
+
+  // Acciones del árbol de invitaciones
+  elements.btnCreateQuotaInvite?.addEventListener('click', createQuotaInvite);
+  elements.btnClaimInviteCode?.addEventListener('click', claimInviteCode);
 
   // Guardar nuevo apodo
   elements.btnSaveNickname?.addEventListener('click', async () => {
@@ -581,43 +838,6 @@ function bindEvents() {
     }
     updateIdentityUi();
     updatePeersListUi();
-  });
-
-  // Generar token de invitación (Invite-Only)
-  elements.btnGenerateInviteToken?.addEventListener('click', async () => {
-    if (!state.identity) return;
-    const guestLabel = prompt('Identificador o nombre para el invitado:', 'compañero_3d');
-    if (!guestLabel) return;
-
-    try {
-      const token = await generateInviteToken(
-        state.identity.privateKey,
-        state.identity.publicSpki,
-        state.identity.fingerprint,
-        guestLabel
-      );
-
-      const inviteLink = `${window.location.origin}/chat/${state.currentRoomId}#invite=${token}`;
-      if (elements.inviteTokenOutput) {
-        elements.inviteTokenOutput.value = inviteLink;
-      }
-      if (elements.inviteTokenContainer) {
-        elements.inviteTokenContainer.style.display = 'block';
-      }
-    } catch (e) {
-      alert(`Error generando invitación: ${e.message}`);
-    }
-  });
-
-  elements.btnCopyInviteToken?.addEventListener('click', () => {
-    if (elements.inviteTokenOutput) {
-      navigator.clipboard.writeText(elements.inviteTokenOutput.value).then(() => {
-        elements.btnCopyInviteToken.textContent = '¡Copiado!';
-        setTimeout(() => {
-          elements.btnCopyInviteToken.textContent = 'Copiar Enlace Exclusivo';
-        }, 2000);
-      });
-    }
   });
 
   // Copiar frase de 12 palabras
@@ -658,7 +878,7 @@ function bindEvents() {
   elements.btnImportMnemonic?.addEventListener('click', async () => {
     const inputStr = (elements.inputImportMnemonic?.value || '').trim();
     if (!inputStr) {
-      alert('Por favor, introduce las 12 palabras separadas por espacios o el JSON.');
+      alert('Por favor, introduce las 12 palabras o el JSON.');
       return;
     }
 
@@ -791,6 +1011,14 @@ function renderRecentRoomsUi() {
     });
     elements.recentRoomsList.appendChild(item);
   });
+}
+
+function formatBytes(bytes) {
+  if (!bytes || bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 }
 
 function escapeHtml(str) {

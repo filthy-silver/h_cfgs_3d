@@ -405,3 +405,76 @@ export async function signAdminModerationAction(adminPrivateKey, actionType, tar
   return { actionPayload, signature };
 }
 
+/**
+ * Calcula el Hash SHA-256 criptográfico de un ArrayBuffer o archivo.
+ * @param {ArrayBuffer} buffer - Contenido binario del archivo
+ * @returns {Promise<string>} Hexadecimal del hash (64 caracteres)
+ */
+export async function computeFileHash(buffer) {
+  const digestBuffer = await crypto.subtle.digest('SHA-256', buffer);
+  return bufferToHex(digestBuffer);
+}
+
+/**
+ * Crea un Certificado Criptográfico de Autoría (Proof of Authorship) para un archivo.
+ * @param {string} fileHash - SHA-256 del archivo
+ * @param {string} fileName - Nombre del archivo
+ * @param {number} fileSize - Tamaño en bytes
+ * @param {CryptoKey} authorPrivateKey - Clave privada del autor
+ * @param {string} authorPublicSpki - Clave pública SPKI del autor
+ * @param {string} authorNickname - Nombre del autor
+ * @returns {Promise<Object>} Certificado firmado
+ */
+export async function createFileAuthorshipCertificate(fileHash, fileName, fileSize, authorPrivateKey, authorPublicSpki, authorNickname) {
+  const payload = {
+    type: 'PROOF_OF_AUTHORSHIP',
+    fileHash,
+    fileName,
+    fileSize,
+    authorSpki: authorPublicSpki,
+    authorNickname,
+    timestamp: Date.now()
+  };
+
+  const signature = await signPayload(authorPrivateKey, payload);
+  return {
+    certificatePayload: payload,
+    signature
+  };
+}
+
+/**
+ * Valida un Certificado Criptográfico de Autoría.
+ * @param {Object} certificate - Objeto con certificatePayload y signature
+ * @param {string} [expectedFileHash] - Hash esperado para contrastar contra el archivo recibido
+ * @returns {Promise<{ valid: boolean, authorNickname?: string, timestamp?: number, error?: string }>}
+ */
+export async function verifyFileAuthorshipCertificate(certificate, expectedFileHash = null) {
+  try {
+    if (!certificate || !certificate.certificatePayload || !certificate.signature) {
+      return { valid: false, error: 'Estructura de certificado inválida' };
+    }
+
+    const { certificatePayload, signature } = certificate;
+
+    if (expectedFileHash && certificatePayload.fileHash !== expectedFileHash) {
+      return { valid: false, error: 'El hash del certificado no coincide con el archivo' };
+    }
+
+    const isValid = await verifyPayload(certificatePayload.authorSpki, certificatePayload, signature);
+    if (!isValid) {
+      return { valid: false, error: 'Firma de autoría inválida o alterada' };
+    }
+
+    return {
+      valid: true,
+      authorNickname: certificatePayload.authorNickname,
+      timestamp: certificatePayload.timestamp,
+      fileHash: certificatePayload.fileHash
+    };
+  } catch (e) {
+    return { valid: false, error: e.message };
+  }
+}
+
+

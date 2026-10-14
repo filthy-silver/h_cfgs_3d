@@ -88,11 +88,17 @@
   <!-- 4. Barra Inferior de Entrada de Texto -->
   <footer class="chat-input-bar">
     <form class="chat-input-form" id="chat-form">
+      <input type="file" id="file-input" style="display: none;" />
+      <button type="button" class="btn-icon-text btn-attach" id="btn-attach-file" title="Enviar archivo o render con certificado de autoría firmado">
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+          <path fill="currentColor" d="M16.5 6v11.5c0 2.21-1.79 4-4 4s-4-1.79-4-4V5c0-1.38 1.12-2.5 2.5-2.5s2.5 1.12 2.5 2.5v10.5c0 .55-.45 1-1 1s-1-.45-1-1V6H10v9.5c0 1.38 1.12 2.5 2.5 2.5s2.5-1.12 2.5-2.5V5c0-2.21-1.79-4-4-4S7 2.79 7 5v12.5c0 3.04 2.46 5.5 5.5 5.5s5.5-2.46 5.5-5.5V6h-1.5z"/>
+        </svg>
+      </button>
       <input
         type="text"
         id="message-input"
         class="chat-input"
-        placeholder="Escribe un mensaje seguro cifrado P2P..."
+        placeholder="Escribe un mensaje o arrastra un archivo 3D aquí..."
         autocomplete="off"
         maxlength="2000"
         required
@@ -192,19 +198,35 @@
       </div>
 
       <div style="margin-top: 1rem; padding-top: 0.8rem; border-top: 1px solid var(--line);">
-        <label style="font-size: 0.8rem; font-weight: 600; color: var(--muted); text-transform: uppercase;">Invitación Exclusiva (Invite-Only)</label>
-        <p style="font-size: 0.8rem; color: var(--muted); margin: 0.3rem 0 0.5rem;">
-          Genera un enlace firmado digitalmente que autoriza el acceso a la comunidad:
-        </p>
-        <button type="button" class="btn-icon-text" id="btn-generate-invite-token">🎟️ Generar Enlace de Invitación</button>
-        <div id="invite-token-container" style="display: none; margin-top: 0.6rem;">
-          <input type="text" id="invite-token-output" class="form-input" style="font-size: 0.75rem; font-family: monospace; margin-bottom: 0.4rem;" readonly />
-          <button type="button" class="btn-icon-text" id="btn-copy-invite-token">Copiar Enlace Exclusivo</button>
+        <label style="font-size: 0.8rem; font-weight: 600; color: var(--muted); text-transform: uppercase;">🌳 Cadena de Confianza y Trazabilidad</label>
+        <div id="invite-tree-summary" style="font-size: 0.85rem; margin: 0.4rem 0; padding: 0.6rem; background: var(--surface-2); border-radius: 6px; border: 1px solid var(--line);">
+          <span>Cargando cupos y linaje...</span>
+        </div>
+
+        <div style="margin-top: 0.5rem;">
+          <label style="font-size: 0.75rem; color: var(--muted);">Emitir invitación con código único trazable (consume 1 de cupo):</label>
+          <div class="input-with-button" style="margin-top: 0.3rem;">
+            <input type="text" id="target-guest-input" class="form-input" placeholder="Nombre del compañero..." />
+            <button type="button" class="btn-icon-text" id="btn-create-quota-invite">Emitir Código</button>
+          </div>
+        </div>
+
+        <div id="issued-invites-container" style="margin-top: 0.6rem; display: none;">
+          <label style="font-size: 0.75rem; color: var(--muted);">Tus invitaciones emitidas:</label>
+          <div id="issued-invites-list" style="margin-top: 0.3rem; display: flex; flex-direction: column; gap: 0.35rem; max-height: 120px; overflow-y: auto;"></div>
+        </div>
+      </div>
+
+      <div style="margin-top: 1rem; padding-top: 0.8rem; border-top: 1px solid var(--line);">
+        <label style="font-size: 0.8rem; font-weight: 600; color: var(--muted); text-transform: uppercase;">📥 Canjear Código de Invitación</label>
+        <div class="input-with-button" style="margin-top: 0.3rem;">
+          <input type="text" id="claim-invite-input" class="form-input" placeholder="ej: INV-A1B2C3" />
+          <button type="button" class="btn-icon-text" id="btn-claim-invite-code">Validar Acceso</button>
         </div>
       </div>
 
       <div class="info-box" style="margin-top: 0.8rem;">
-        ⚡ <strong>P2P puro:</strong> Los mensajes viajan directamente entre vuestros navegadores sin almacenarse en ninguna base de datos externa.
+        ⚡ <strong>P2P puro:</strong> Los mensajes y archivos viajan directamente entre vuestros navegadores sin almacenarse en ninguna base de datos externa.
       </div>
     </div>
   </div>

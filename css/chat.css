@@ -383,6 +383,136 @@ body {
   opacity: 0.92;
 }
 
+.btn-attach {
+  padding: 0.75rem;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  border-radius: 8px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.btn-attach:hover {
+  color: var(--accent);
+  background: var(--surface-hover);
+  border-color: var(--accent);
+}
+
+/* Tarjeta de Archivo con Certificado de Autoría */
+.file-attachment-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin-top: 0.4rem;
+}
+
+.msg-outbound .file-attachment-card {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.file-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.file-name-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.file-size-tag {
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.msg-outbound .file-size-tag {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.file-authorship-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.5rem;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.file-hash-tag {
+  font-family: monospace;
+  font-size: 0.68rem;
+  color: var(--muted);
+  word-break: break-all;
+}
+
+.btn-download-file {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.8rem;
+  background: var(--accent);
+  color: #ffffff;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.btn-download-file:hover {
+  opacity: 0.9;
+}
+
+/* Items del Árbol de Invitaciones */
+.invite-tree-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.35rem 0.6rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 0.75rem;
+}
+
+.invite-code-pill {
+  font-family: monospace;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.invite-status-badge {
+  font-size: 0.7rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  background: var(--surface-2);
+}
+
+.invite-status-badge.claimed {
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--success);
+}
+
 /* ───────── Modales ───────── */
 .chat-modal {
   position: fixed;
