@@ -1,27 +1,42 @@
 :root {
   color-scheme: light dark;
-  --bg: light-dark(#f4f6f9, #0a0e16);
-  --surface: light-dark(#ffffff, #111827);
-  --surface-2: light-dark(#eceff4, #0d1421);
-  --line: light-dark(#d3d9e2, #222d40);
-  --text: light-dark(#101828, #eef2f8);
-  --muted: light-dark(#5a6577, #94a1b5);
-  --accent: light-dark(#0369a1, #4cc2ff);
 
-  --mod-proye: #0284c7;
-  --mod-color: #d97706;
-  --mod-dibujo: #7c3aed;
-  --mod-fol: #059669;
-  --mod-inter: #db2777;
-  --mod-anim: #2563eb;
-  --mod-ingles: #64748b;
-  --mod-recreo: #475569;
+  /* ───────── Paleta Cálida y Orgánica ("Warm Studio") ───────── */
+  --bg: light-dark(#faf8f5, #121319);
+  --surface: light-dark(#ffffff, #1b1c26);
+  --surface-2: light-dark(#f2eee8, #242534);
+  --line: light-dark(#e6e1d6, #2e3042);
+  --text: light-dark(#20212a, #f3f4fa);
+  --muted: light-dark(#686b80, #9ba0b7);
+  --accent: light-dark(#2563eb, #60a5fa);
+  --accent-soft: light-dark(rgba(37, 99, 235, 0.1), rgba(96, 165, 250, 0.16));
+
+  /* ───────── Radios Orgánicos (Squircles Suaves) ───────── */
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 18px;
+  --radius-pill: 9999px;
+
+  /* ───────── Elevaciones Aterciopeladas ───────── */
+  --shadow-sm: 0 2px 6px -1px rgba(32, 33, 42, 0.04);
+  --shadow-card: 0 4px 18px -2px rgba(32, 33, 42, 0.05);
+  --shadow-hover: 0 8px 26px -3px rgba(32, 33, 42, 0.08);
+
+  /* ───────── Asignaturas Accesibles (WCAG AA > 4.5:1 en ambos modos) ───────── */
+  --mod-proye: light-dark(#0284c7, #38bdf8);
+  --mod-color: light-dark(#b45309, #fbbf24);
+  --mod-dibujo: light-dark(#6d28d9, #c084fc);
+  --mod-fol: light-dark(#047857, #34d399);
+  --mod-inter: light-dark(#be185d, #f472b6);
+  --mod-anim: light-dark(#1d4ed8, #60a5fa);
+  --mod-ingles: light-dark(#334155, #94a1b5);
+  --mod-recreo: light-dark(#b45309, #fbbf24);
 }
 
 :root[data-theme="dark"]  { color-scheme: dark; }
 :root[data-theme="light"] { color-scheme: light; }
 
-* {
+*, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
@@ -29,12 +44,13 @@
 
 body {
   min-height: 100vh;
-  padding: 1.5rem 1rem 3rem;
+  padding: 1.5rem 1rem 3.5rem;
   background: var(--bg);
   color: var(--text);
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   font-variant-numeric: tabular-nums;
-  line-height: 1.4;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
 }
 
 .container {
