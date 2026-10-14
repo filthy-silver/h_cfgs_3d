@@ -22,6 +22,7 @@ describe('kanban-store.js · Sincronización y Serialización Zero-Knowledge', (
           notes: 'Módulo de animación 3D · Aula INF-1 con acentos: áéíóú ñ',
           date: '2026-10-25',
           time: '18:30',
+          // Campos de normalización que aplica unpackCompactData al desempaquetar
           mod: null,
           type: 'personal'
         }

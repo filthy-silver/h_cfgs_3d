@@ -14,7 +14,8 @@ import {
   savePersonalTask,
   deletePersonalTask
 } from './kanban-store.js';
-import { renderCardHtml } from './kanban-cards.js';
+import { renderCardHtml, resolveCardSubject, formatCardDueDate, escapeHtml } from './kanban-cards.js';
+import { sanitizeUrl } from '../domain/sanitizer.js';
 import { initKanbanDnD } from './kanban-dnd.js';
 import { initKanbanNotes, renderNotesGrid } from './kanban-notes.js';
 import { initKanbanSync } from './kanban-sync.js';
@@ -23,6 +24,7 @@ import { initKanbanSync } from './kanban-sync.js';
 let allItems = [];
 let editingTaskId = null;
 let currentSearchTerm = '';
+let lastActiveElement = null;
 
 /**
  * Datos de demostración de respaldo en caso de entorno local sin conexión o APIs no disponibles.
@@ -278,13 +280,161 @@ function closePersonalTaskModal() {
 }
 
 /**
- * Configura los eventos del formulario y modal de tareas personales.
+ * Abre el diálogo de detalle enriquecido para una entrega de Aules o convocatoria de examen.
+ * @param {Object} item
+ */
+function openAssignmentDetailModal(item) {
+  const modal = document.getElementById('assignment-detail-modal');
+  if (!modal || !item) return;
+
+  const isExam = item.type === 'exam';
+  const isAules = item.type === 'aules';
+
+  const subject = resolveCardSubject(item);
+  const { formattedDate, relativeBadge, isUrgent } = formatCardDueDate(item.dueIso || item.dueTimestamp);
+  const cleanTitle = (item.title || '').replace(/^(Venciment de |Vencimiento de )/i, '').trim();
+
+  // Distintivo de tipo
+  const typeBadgeEl = document.getElementById('assignment-detail-type-badge');
+  if (typeBadgeEl) {
+    if (isExam) {
+      typeBadgeEl.textContent = '📝 Examen';
+      typeBadgeEl.className = 'badge badge-exam';
+    } else {
+      typeBadgeEl.textContent = '📚 Aules';
+      typeBadgeEl.className = 'badge badge-aules';
+    }
+  }
+
+  // Badge de módulo
+  const badgeSub = document.getElementById('assignment-detail-badge-sub');
+  if (badgeSub) {
+    badgeSub.textContent = subject.name;
+    badgeSub.style.borderColor = `var(${subject.colorVar})`;
+    badgeSub.style.color = `var(${subject.colorVar})`;
+  }
+
+  // Título
+  const titleEl = document.getElementById('assignment-detail-title');
+  if (titleEl) {
+    titleEl.textContent = cleanTitle;
+  }
+
+  // Fecha y urgencia
+  const dueEl = document.getElementById('assignment-detail-due');
+  if (dueEl) {
+    dueEl.innerHTML = formattedDate ? `📅 ${formattedDate}` : 'Sin fecha límite especificada';
+  }
+
+  const urgencyEl = document.getElementById('assignment-detail-urgency');
+  if (urgencyEl) {
+    urgencyEl.textContent = relativeBadge || '';
+    urgencyEl.className = `assignment-urgency-badge ${isUrgent ? 'urgent' : ''}`;
+  }
+
+  // Icono y encabezado de la sección de resumen
+  const summaryIconEl = document.getElementById('assignment-summary-icon');
+  const sectionHeadingEl = document.getElementById('assignment-detail-section-heading');
+  if (summaryIconEl) {
+    summaryIconEl.textContent = isExam ? '📝' : '⚡';
+  }
+  if (sectionHeadingEl) {
+    sectionHeadingEl.textContent = isExam ? 'Detalles de la convocatoria' : 'Resumen de la entrega';
+  }
+
+  // Resumen inteligente (Párrafo o Short)
+  const paragraphEl = document.getElementById('assignment-detail-paragraph');
+  const aiSourceEl = document.getElementById('assignment-detail-ai-source');
+  let summaryParagraph = '';
+  if (isExam) {
+    summaryParagraph = item.description || item.notes || 'Examen oficial programado en el calendario escolar de CFGS 3D.';
+  } else {
+    summaryParagraph = item.aiSummary?.paragraph || item.aiSummary?.short || item.description || 'Consulta los detalles en el enlace de Aules.';
+  }
+
+  if (paragraphEl) {
+    paragraphEl.textContent = summaryParagraph;
+  }
+  if (aiSourceEl) {
+    if (isExam) {
+      aiSourceEl.textContent = 'Examen Oficial';
+    } else {
+      aiSourceEl.textContent = item.aiSummary?.source === 'ai' ? '⚡ Resumen Workers AI' : 'Resumen inteligente';
+    }
+  }
+
+  // Entregables requeridos (solo aplicable a entregas de Aules con especificaciones)
+  const deliverablesBox = document.getElementById('assignment-deliverables-box');
+  const deliverablesList = document.getElementById('assignment-detail-deliverables');
+  const deliverables = Array.isArray(item.aiSummary?.deliverables) ? item.aiSummary.deliverables : [];
+  if (!isExam && deliverables.length > 0 && deliverablesList) {
+    deliverablesList.innerHTML = deliverables
+      .map(ext => `<span class="deliverable-tag-large">${escapeHtml(ext)}</span>`)
+      .join('');
+    deliverablesBox?.classList.remove('is-hidden');
+  } else {
+    deliverablesBox?.classList.add('is-hidden');
+  }
+
+  // Enunciado original completo
+  const fullDetailsWrapper = document.getElementById('assignment-full-details-wrapper');
+  const originalTextEl = document.getElementById('assignment-detail-original');
+  if (item.description && item.description.trim()) {
+    if (originalTextEl) originalTextEl.textContent = item.description;
+    fullDetailsWrapper?.classList.remove('is-hidden');
+  } else {
+    fullDetailsWrapper?.classList.add('is-hidden');
+  }
+
+  // Enlace directo a Aules o recurso externo
+  const linkEl = document.getElementById('assignment-detail-link');
+  const linkTextEl = document.getElementById('assignment-detail-link-text');
+  if (linkEl) {
+    const safeUrl = sanitizeUrl(item.url);
+    if (isExam && !safeUrl) {
+      linkEl.classList.add('is-hidden');
+    } else {
+      linkEl.classList.remove('is-hidden');
+      linkEl.href = safeUrl || 'https://aules.edu.gva.es/fp/';
+      if (linkTextEl) {
+        linkTextEl.textContent = isExam ? 'Ver recurso del examen' : 'Ir a la entrega en Aules';
+      }
+    }
+  }
+
+  lastActiveElement = document.activeElement;
+  modal.classList.add('is-open');
+  modal.setAttribute('aria-hidden', 'false');
+
+  // Mover el foco de forma accesible al botón de cierre del modal
+  const closeBtn = modal.querySelector('[data-close-assignment-modal]');
+  setTimeout(() => closeBtn?.focus(), 40);
+}
+
+/**
+ * Cierra el diálogo de detalle de entrega y devuelve el foco al elemento anterior.
+ */
+function closeAssignmentDetailModal() {
+  const modal = document.getElementById('assignment-detail-modal');
+  if (!modal) return;
+  modal.classList.remove('is-open');
+  modal.setAttribute('aria-hidden', 'true');
+
+  if (lastActiveElement && typeof lastActiveElement.focus === 'function') {
+    lastActiveElement.focus();
+    lastActiveElement = null;
+  }
+}
+
+/**
+ * Configura los eventos del formulario y modal de tareas personales y detalle de Aules.
  */
 function setupModalEvents() {
-  const modal = document.getElementById('personal-task-modal');
+  const modalPersonal = document.getElementById('personal-task-modal');
+  const modalAssignment = document.getElementById('assignment-detail-modal');
   const form = document.getElementById('personal-task-form');
   const btnOpen = document.getElementById('btn-add-personal-task');
-  const btnClose = modal?.querySelectorAll('[data-close-modal]');
+  const btnClose = modalPersonal?.querySelectorAll('[data-close-modal]');
 
   btnOpen?.addEventListener('click', () => openPersonalTaskModal(null));
 
@@ -292,17 +442,29 @@ function setupModalEvents() {
     btn.addEventListener('click', closePersonalTaskModal);
   });
 
-  // Cerrar al pulsar escape
+  // Cerrar modal de entrega con botón de cierre
+  document.querySelectorAll('[data-close-assignment-modal]').forEach(btn => {
+    btn.addEventListener('click', closeAssignmentDetailModal);
+  });
+
+  // Cerrar modales al pulsar Escape
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && modal?.classList.contains('is-open')) {
-      closePersonalTaskModal();
+    if (e.key === 'Escape') {
+      if (modalPersonal?.classList.contains('is-open')) closePersonalTaskModal();
+      if (modalAssignment?.classList.contains('is-open')) closeAssignmentDetailModal();
     }
   });
 
   // Cerrar al pulsar el backdrop
-  modal?.addEventListener('click', (e) => {
-    if (e.target === modal) {
+  modalPersonal?.addEventListener('click', (e) => {
+    if (e.target === modalPersonal) {
       closePersonalTaskModal();
+    }
+  });
+
+  modalAssignment?.addEventListener('click', (e) => {
+    if (e.target === modalAssignment) {
+      closeAssignmentDetailModal();
     }
   });
 
@@ -341,12 +503,54 @@ function setupModalEvents() {
   });
 }
 
+let lastCardActivationTime = 0;
+
 /**
- * Delegación de eventos para acciones en las tarjetas (editar, eliminar, selector móvil de columna).
+ * Abre el diálogo correspondiente según el tipo de tarjeta (Aules, Examen oficial o Tarea personal).
+ * @param {string} cardId
+ */
+function handleCardActivation(cardId) {
+  if (!cardId) return;
+  if (Date.now() - lastCardActivationTime < 350) return;
+  lastCardActivationTime = Date.now();
+
+  const item = allItems.find(i => String(i.id).trim() === String(cardId).trim());
+  if (!item) return;
+
+  if (item.type === 'personal') {
+    openPersonalTaskModal(item.id);
+  } else {
+    // Entregas de Aules o Exámenes de convocatoria
+    openAssignmentDetailModal(item);
+  }
+}
+
+/**
+ * Delegación de eventos para acciones en las tarjetas (editar, eliminar, detalle Aules/Exámenes, selector móvil de columna).
  */
 function setupCardDelegation() {
+  // Manejo de pulsación de teclado (Enter o Espacio) en tarjetas accesibles con role="button"
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      // Ignorar si el foco está en un selector o botón interno
+      if (e.target.closest('a, select, button, input, textarea')) return;
+
+      const card = e.target.closest('.kanban-card');
+      if (card) {
+        e.preventDefault();
+        handleCardActivation(card.dataset.id);
+      }
+    }
+  });
+
   document.addEventListener('click', (e) => {
-    // Editar tarea personal
+    // 1. Enlace directo a Aules: permitir navegación nativa a Moodle y NO abrir el modal
+    const aulesLink = e.target.closest('.card-link, [data-action="open-aules-link"]');
+    if (aulesLink) {
+      return;
+    }
+
+    // 2. Editar tarea personal
     const editBtn = e.target.closest('.btn-edit-task');
     if (editBtn) {
       const id = editBtn.dataset.id;
@@ -354,16 +558,27 @@ function setupCardDelegation() {
       return;
     }
 
-    // Eliminar tarea personal
+    // 3. Eliminar tarea personal
     const deleteBtn = e.target.closest('.btn-delete-task');
     if (deleteBtn) {
       const id = deleteBtn.dataset.id;
       if (confirm('¿Deseas eliminar esta tarea personal?')) {
         deletePersonalTask(id);
-        allItems = allItems.filter(item => item.id !== id);
+        allItems = allItems.filter(item => String(item.id).trim() !== String(id).trim());
         renderBoard();
       }
       return;
+    }
+
+    // 4. Ignorar controles de mover estado y botones internos
+    if (e.target.closest('.card-move-control, select, .card-actions-row, .card-drag-handle')) {
+      return;
+    }
+
+    // 5. Clic en la ficha completa (Aules, Examen oficial o Tarea personal)
+    const card = e.target.closest('.kanban-card');
+    if (card) {
+      handleCardActivation(card.dataset.id);
     }
   });
 
@@ -422,11 +637,14 @@ function initKanbanApp() {
   // 1. Inicializar tema visual sincronizado con index.html
   initTheme();
 
-  // 2. Inicializar Drag & Drop nativo
+  // 2. Inicializar Drag & Drop nativo con recuperación ante micro-movimientos
   initKanbanDnD({
     onCardMoved: (cardId, newColumnId) => {
       setCardColumn(cardId, newColumnId);
       updateBoardCounters();
+    },
+    onCardClicked: (cardId) => {
+      handleCardActivation(cardId);
     }
   });
 

@@ -272,7 +272,7 @@ export function importAllKanbanData(data) {
 }
 
 /**
- * Empaqueta el estado del tablero en un formato compacto minificado para enlaces cortos y QR.
+ * Empaqueta el estado del tablero en un formato compacto minificado para enlaces directos de sincronización.
  * @param {Object} data
  * @returns {Object}
  */
@@ -357,7 +357,7 @@ export function unpackCompactData(raw) {
 }
 
 /**
- * Codifica el paquete de datos del tablero en una cadena Base64 ultracompacta y segura para URLs y QR.
+ * Codifica el paquete de datos del tablero en una cadena Base64 ultracompacta y segura para URLs de sincronización.
  * @param {Object} data
  * @returns {string|null}
  */
