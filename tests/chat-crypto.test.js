@@ -123,4 +123,44 @@ describe('chat/crypto.js · Motor Criptográfico Autosoberano', () => {
     });
   });
 
+  it('genera y valida tokens de invitación a la comunidad (Invite-Only)', async () => {
+    const adminKey = await generateIdentityKeyPair();
+    const { publicSpki } = await exportKeyPair(adminKey);
+    const adminFp = await getFingerprint(publicSpki);
+
+    const token = await generateInviteToken(adminKey.privateKey, publicSpki, adminFp, 'alumno_test', 24);
+    assert.ok(typeof token === 'string');
+
+    const result = await verifyInviteToken(token);
+    assert.equal(result.valid, true);
+    assert.equal(result.payload.invitedLabel, 'alumno_test');
+    assert.equal(result.payload.adminFingerprint, adminFp);
+  });
+
+  it('rechaza tokens de invitación que hayan expirado', async () => {
+    const adminKey = await generateIdentityKeyPair();
+    const { publicSpki } = await exportKeyPair(adminKey);
+    const adminFp = await getFingerprint(publicSpki);
+
+    // Token con expiración negativa (-1 hora)
+    const token = await generateInviteToken(adminKey.privateKey, publicSpki, adminFp, 'alumno_expirado', -1);
+    const result = await verifyInviteToken(token);
+    assert.equal(result.valid, false);
+    assert.match(result.reason, /expirado/i);
+  });
+
+  it('firma y valida acciones de moderación administrativa (KICK)', async () => {
+    const adminKey = await generateIdentityKeyPair();
+    const { publicSpki } = await exportKeyPair(adminKey);
+
+    const { actionPayload, signature } = await signAdminModerationAction(
+      adminKey.privateKey,
+      'ADMIN_KICK',
+      { targetPeerId: '8f3b2a9c', reason: 'Spam masivo' }
+    );
+
+    const isValid = await verifyPayload(publicSpki, actionPayload, signature);
+    assert.equal(isValid, true);
+  });
+
 });

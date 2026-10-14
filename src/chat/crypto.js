@@ -326,3 +326,82 @@ export async function deriveKeyPairFromMnemonic(mnemonic) {
   const rawHex = bufferToHex(derivedBits);
   return { rawHex, seedBytes };
 }
+
+export const DEFAULT_COMMUNITY = 'filthysilver-cfgs3d';
+
+/**
+ * Genera un token de invitación firmado para unirse a la comunidad (Invite-Only).
+ * @param {CryptoKey} adminPrivateKey - Clave privada del moderador/administrador
+ * @param {string} adminPublicSpki - Clave pública SPKI del moderador
+ * @param {string} adminFingerprint - Huella del moderador
+ * @param {string} [invitedLabel] - Nombre o identificador del invitado (ej: "alumno_3d")
+ * @param {number} [expiresInHours] - Horas de validez (por defecto 72h)
+ * @returns {Promise<string>} Token de invitación en Base64
+ */
+export async function generateInviteToken(adminPrivateKey, adminPublicSpki, adminFingerprint, invitedLabel = 'compañero', expiresInHours = 72) {
+  const payload = {
+    community: DEFAULT_COMMUNITY,
+    adminFingerprint,
+    invitedLabel,
+    issuedAt: Date.now(),
+    expiresAt: Date.now() + (expiresInHours * 3600 * 1000)
+  };
+
+  const signature = await signPayload(adminPrivateKey, payload);
+  const tokenObj = { payload, signature, adminSpki: adminPublicSpki };
+  return btoa(JSON.stringify(tokenObj));
+}
+
+/**
+ * Valida un token de invitación a la comunidad.
+ * @param {string} tokenString - Token en Base64
+ * @returns {Promise<{ valid: boolean, reason?: string, payload?: Object }>}
+ */
+export async function verifyInviteToken(tokenString) {
+  try {
+    const raw = atob(tokenString.trim());
+    const tokenObj = JSON.parse(raw);
+    const { payload, signature, adminSpki } = tokenObj;
+
+    if (!payload || !signature || !adminSpki) {
+      return { valid: false, reason: 'Formato de token incompleto' };
+    }
+
+    if (payload.community !== DEFAULT_COMMUNITY) {
+      return { valid: false, reason: 'El token pertenece a otra comunidad' };
+    }
+
+    if (payload.expiresAt && payload.expiresAt < Date.now()) {
+      return { valid: false, reason: 'La invitación ha expirado' };
+    }
+
+    const isValidSig = await verifyPayload(adminSpki, payload, signature);
+    if (!isValidSig) {
+      return { valid: false, reason: 'Firma criptográfica de invitación inválida o manipulada' };
+    }
+
+    return { valid: true, payload };
+  } catch (err) {
+    return { valid: false, reason: `Token no decodificable: ${err.message}` };
+  }
+}
+
+/**
+ * Firma una acción administrativa de moderación (KICK o DELETE_MESSAGE).
+ * @param {CryptoKey} adminPrivateKey
+ * @param {'ADMIN_KICK'|'ADMIN_DELETE_MESSAGE'} actionType
+ * @param {Object} targetData
+ * @returns {Promise<{ actionPayload: Object, signature: string }>}
+ */
+export async function signAdminModerationAction(adminPrivateKey, actionType, targetData) {
+  const actionPayload = {
+    type: actionType,
+    target: targetData,
+    timestamp: Date.now(),
+    nonce: Math.random().toString(36).slice(2, 8)
+  };
+
+  const signature = await signPayload(adminPrivateKey, actionPayload);
+  return { actionPayload, signature };
+}
+

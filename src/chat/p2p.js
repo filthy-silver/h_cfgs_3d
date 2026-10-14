@@ -42,9 +42,12 @@ export class P2PMeshRoom {
     this.onMessage = options.onMessage || (() => {});
     this.onProfileUpdate = options.onProfileUpdate || (() => {});
     this.onStatusChange = options.onStatusChange || (() => {});
+    this.onMessageDeleted = options.onMessageDeleted || (() => {});
+    this.onKicked = options.onKicked || (() => {});
 
     // Mapa de compañeros: peerId -> { peerConnection, dataChannel, profile }
     this.peers = new Map();
+    this.peerMessageTimestamps = new Map(); // Para control anti-spam / rate-limiting
 
     // Soporte para pruebas locales instantáneas entre pestañas (BroadcastChannel nativo)
     this.broadcastChannel = null;
@@ -395,8 +398,18 @@ export class P2PMeshRoom {
   async _handleIncomingData(packet, fromPeerId) {
     const peerObj = this.peers.get(fromPeerId);
 
-    // 1. Mensaje de chat ordinario (verificación criptográfica)
+    // Control anti-spam: máximo 4 mensajes cada 2 segundos por peer
     if (packet.type === 'CHAT_MESSAGE') {
+      const now = Date.now();
+      const history = this.peerMessageTimestamps.get(fromPeerId) || [];
+      const recent = history.filter(t => now - t < 2000);
+      if (recent.length >= 4) {
+        console.warn(`[P2P] Ignorando mensaje por exceso de frecuencia de ${fromPeerId}`);
+        return;
+      }
+      recent.push(now);
+      this.peerMessageTimestamps.set(fromPeerId, recent);
+
       const { messageData, signature } = packet;
 
       // Verificamos la firma criptográfica con la clave pública del emisor
@@ -426,6 +439,31 @@ export class P2PMeshRoom {
           peerObj.profile.publicSpki = packet.publicSpki;
         }
         this.onProfileUpdate(peerObj.profile, oldName);
+      }
+      return;
+    }
+
+    // 3. Orden administrativa de borrado de mensaje
+    if (packet.type === 'ADMIN_DELETE_MESSAGE') {
+      const { messageId, adminSpki, signature, timestamp } = packet;
+      const isValid = await verifyPayload(adminSpki, { type: 'ADMIN_DELETE_MESSAGE', messageId, timestamp }, signature);
+      if (isValid) {
+        this.onMessageDeleted(messageId);
+      }
+      return;
+    }
+
+    // 4. Orden administrativa de expulsión de sala (KICK)
+    if (packet.type === 'ADMIN_KICK') {
+      const { targetPeerId, reason, adminSpki, signature, timestamp } = packet;
+      const isValid = await verifyPayload(adminSpki, { type: 'ADMIN_KICK', targetPeerId, reason, timestamp }, signature);
+      if (isValid) {
+        if (targetPeerId === this.peerId) {
+          this.destroy();
+          this.onKicked(reason || 'Has sido expulsado de la sala por un moderador.');
+        } else {
+          this._handlePeerDisconnected(targetPeerId);
+        }
       }
       return;
     }
@@ -514,6 +552,63 @@ export class P2PMeshRoom {
       timestamp: Date.now()
     };
 
+    const packetJson = JSON.stringify(packet);
+    for (const [_, peerObj] of this.peers.entries()) {
+      if (peerObj.dataChannel && peerObj.dataChannel.readyState === 'open') {
+        try {
+          peerObj.dataChannel.send(packetJson);
+        } catch {}
+      }
+    }
+  }
+
+  /**
+   * Emite una orden administrativa de borrado de mensaje firmada por el moderador.
+   * @param {string} messageId
+   * @param {CryptoKey} adminPrivateKey
+   * @param {string} adminPublicSpki
+   */
+  async broadcastAdminDelete(messageId, adminPrivateKey, adminPublicSpki) {
+    const timestamp = Date.now();
+    const signature = await signPayload(adminPrivateKey, { type: 'ADMIN_DELETE_MESSAGE', messageId, timestamp });
+    const packet = {
+      type: 'ADMIN_DELETE_MESSAGE',
+      messageId,
+      adminSpki: adminPublicSpki,
+      signature,
+      timestamp
+    };
+    this._broadcastPacket(packet);
+    this.onMessageDeleted(messageId);
+  }
+
+  /**
+   * Emite una orden administrativa de expulsión firmada por el moderador.
+   * @param {string} targetPeerId
+   * @param {string} reason
+   * @param {CryptoKey} adminPrivateKey
+   * @param {string} adminPublicSpki
+   */
+  async broadcastAdminKick(targetPeerId, reason, adminPrivateKey, adminPublicSpki) {
+    const timestamp = Date.now();
+    const signature = await signPayload(adminPrivateKey, { type: 'ADMIN_KICK', targetPeerId, reason, timestamp });
+    const packet = {
+      type: 'ADMIN_KICK',
+      targetPeerId,
+      reason,
+      adminSpki: adminPublicSpki,
+      signature,
+      timestamp
+    };
+    this._broadcastPacket(packet);
+    this._handlePeerDisconnected(targetPeerId);
+  }
+
+  /**
+   * Retransmite un paquete JSON a todos los DataChannels abiertos.
+   * @private
+   */
+  _broadcastPacket(packet) {
     const packetJson = JSON.stringify(packet);
     for (const [_, peerObj] of this.peers.entries()) {
       if (peerObj.dataChannel && peerObj.dataChannel.readyState === 'open') {

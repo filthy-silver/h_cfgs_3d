@@ -162,6 +162,14 @@
           <button type="button" class="btn-icon-text" id="btn-import-mnemonic">Restaurar</button>
         </div>
       </div>
+
+      <div class="form-group" style="margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid var(--line);">
+        <label>Permisos de Moderación (filthysilver.net)</label>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span id="admin-status-badge" style="font-size: 0.85rem; font-weight: 600;">👤 Miembro Regular</span>
+          <button type="button" class="btn-icon-text" id="btn-toggle-admin-mode">Activar Modo Admin</button>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -182,7 +190,20 @@
         <input type="text" id="share-link-input" class="form-input" readonly />
         <button type="button" class="btn-icon-text" id="btn-copy-share-link">Copiar Enlace</button>
       </div>
-      <div class="info-box" style="margin-top: 0.5rem;">
+
+      <div style="margin-top: 1rem; padding-top: 0.8rem; border-top: 1px solid var(--line);">
+        <label style="font-size: 0.8rem; font-weight: 600; color: var(--muted); text-transform: uppercase;">Invitación Exclusiva (Invite-Only)</label>
+        <p style="font-size: 0.8rem; color: var(--muted); margin: 0.3rem 0 0.5rem;">
+          Genera un enlace firmado digitalmente que autoriza el acceso a la comunidad:
+        </p>
+        <button type="button" class="btn-icon-text" id="btn-generate-invite-token">🎟️ Generar Enlace de Invitación</button>
+        <div id="invite-token-container" style="display: none; margin-top: 0.6rem;">
+          <input type="text" id="invite-token-output" class="form-input" style="font-size: 0.75rem; font-family: monospace; margin-bottom: 0.4rem;" readonly />
+          <button type="button" class="btn-icon-text" id="btn-copy-invite-token">Copiar Enlace Exclusivo</button>
+        </div>
+      </div>
+
+      <div class="info-box" style="margin-top: 0.8rem;">
         ⚡ <strong>P2P puro:</strong> Los mensajes viajan directamente entre vuestros navegadores sin almacenarse en ninguna base de datos externa.
       </div>
     </div>
@@ -199,9 +220,16 @@
     </div>
     <div class="modal-body">
       <div class="form-group">
-        <label for="new-room-input">Nombre de la nueva sala</label>
+        <label>Salas Oficiales de la Comunidad</label>
+        <div class="official-rooms-grid" id="official-rooms-list">
+          <!-- Tarjetas inyectadas dinámicamente -->
+        </div>
+      </div>
+
+      <div class="form-group" style="margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid var(--line);">
+        <label for="new-room-input">Abrir o Crear Sala Personalizada</label>
         <div class="input-with-button">
-          <input type="text" id="new-room-input" class="form-input" placeholder="ej: examen-animacion-3d" />
+          <input type="text" id="new-room-input" class="form-input" placeholder="ej: proyecto-render-3d" />
           <button type="button" class="btn-icon-text" id="btn-confirm-switch-room">Entrar</button>
         </div>
       </div>
