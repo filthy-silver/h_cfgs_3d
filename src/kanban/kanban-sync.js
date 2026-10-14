@@ -1,19 +1,27 @@
 /**
  * @file kanban-sync.js
- * @description Gestión de la vinculación y sincronización en la nube (Pairing Handshake)
- * entre dispositivos (PC Torre ↔ Móvil) con PIN temporal de 5 minutos y cierre automático.
+ * @description Gestión de la vinculación y sincronización (Pairing Handshake)
+ * entre dispositivos (PC Torre ↔ Móvil ↔ Portátil) mediante Enlace Directo Instantáneo
+ * (Zero-Knowledge) o PIN temporal de 5 minutos en la nube.
  */
 
-import { exportAllKanbanData, importAllKanbanData } from './kanban-store.js';
+import {
+  exportAllKanbanData,
+  importAllKanbanData,
+  encodeSyncPayload,
+  decodeSyncPayload
+} from './kanban-store.js';
 
 let activePin = null;
+let currentDirectLink = '';
 let countdownInterval = null;
 let pollInterval = null;
 let remainingSeconds = 300;
 let onSyncSuccessCallback = null;
+let pendingIncomingData = null;
 
 /**
- * Cambia a la pestaña de compartir tablero (genera código).
+ * Cambia a la pestaña de compartir tablero (genera código y enlace directo).
  */
 export function switchToShareTab() {
   const tabShare = document.getElementById('tab-sync-share');
@@ -31,7 +39,7 @@ export function switchToShareTab() {
 }
 
 /**
- * Cambia a la pestaña de canjear código en este dispositivo.
+ * Cambia a la pestaña de canjear código o enlace en este dispositivo.
  */
 export function switchToClaimTab() {
   const tabShare = document.getElementById('tab-sync-share');
@@ -49,7 +57,7 @@ export function switchToClaimTab() {
 }
 
 /**
- * Abre el diálogo de sincronización y genera PIN si está en la pestaña compartir.
+ * Abre el diálogo de sincronización y genera PIN / enlace si está en la pestaña compartir.
  */
 export function openSyncModal() {
   const modal = document.getElementById('sync-modal');
@@ -77,6 +85,49 @@ export function closeSyncModal() {
   resetShareView();
 }
 
+/**
+ * Abre el diálogo de confirmación cuando se recibe un tablero mediante enlace directo (#sync=...).
+ * @param {Object} data
+ */
+export function openIncomingSyncModal(data) {
+  pendingIncomingData = data;
+  const modal = document.getElementById('incoming-sync-modal');
+  const statsEl = document.getElementById('incoming-sync-stats');
+  if (!modal) return;
+
+  const tasksCount = Array.isArray(data.personalTasks) ? data.personalTasks.length : 0;
+  const notesCount = Array.isArray(data.stickyNotes) ? data.stickyNotes.length : 0;
+  const colsCount = data.columns && typeof data.columns === 'object' ? Object.keys(data.columns).length : 0;
+
+  if (statsEl) {
+    statsEl.innerHTML = `
+      <strong>📦 Resumen del tablero recibido:</strong><br>
+      • <strong>${tasksCount}</strong> tareas personales<br>
+      • <strong>${notesCount}</strong> notas y recordatorios<br>
+      • <strong>${colsCount}</strong> posiciones de columnas configuradas
+    `;
+  }
+
+  modal.classList.add('is-open');
+  modal.setAttribute('aria-hidden', 'false');
+}
+
+/**
+ * Cierra el modal de sincronización entrante y limpia la URL hash.
+ */
+export function closeIncomingSyncModal() {
+  const modal = document.getElementById('incoming-sync-modal');
+  if (modal) {
+    modal.classList.remove('is-open');
+    modal.setAttribute('aria-hidden', 'true');
+  }
+  pendingIncomingData = null;
+  // Limpiar el hash de la URL sin recargar la página
+  if (window.location.hash.includes('sync=')) {
+    history.replaceState(null, '', window.location.pathname + window.location.search);
+  }
+}
+
 // Exponer en window para llamadas de respaldo directas desde HTML / inline onclick
 if (typeof window !== 'undefined') {
   window.__openSyncModal = openSyncModal;
@@ -95,6 +146,8 @@ export function initKanbanSync({ onDataRestored } = {}) {
   const formClaim = document.getElementById('form-sync-claim');
   const inputPin = document.getElementById('input-claim-pin');
   const btnRegen = document.getElementById('btn-regen-pin');
+  const btnCopyLink = document.getElementById('btn-copy-sync-link');
+  const btnConfirmIncoming = document.getElementById('btn-confirm-incoming-sync');
 
   // Delegación global en document para garantizar compatibilidad táctil / móvil
   document.addEventListener('click', (e) => {
@@ -109,6 +162,13 @@ export function initKanbanSync({ onDataRestored } = {}) {
     if (e.target.closest('[data-close-sync-modal]')) {
       e.preventDefault();
       closeSyncModal();
+      return;
+    }
+
+    // Cerrar modal de sincronización entrante
+    if (e.target.closest('[data-close-incoming-sync]')) {
+      e.preventDefault();
+      closeIncomingSyncModal();
       return;
     }
 
@@ -134,9 +194,16 @@ export function initKanbanSync({ onDataRestored } = {}) {
 
   // Cerrar al pulsar Escape
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && modal?.classList.contains('is-open')) {
-      closeSyncModal();
+    if (e.key === 'Escape') {
+      if (modal?.classList.contains('is-open')) closeSyncModal();
+      const incomingModal = document.getElementById('incoming-sync-modal');
+      if (incomingModal?.classList.contains('is-open')) closeIncomingSyncModal();
     }
+  });
+
+  // Botón: Copiar enlace directo instantáneo
+  btnCopyLink?.addEventListener('click', () => {
+    copyDirectSyncLink();
   });
 
   // Regenerar PIN si caducó
@@ -144,20 +211,82 @@ export function initKanbanSync({ onDataRestored } = {}) {
     requestNewPin();
   });
 
-  // Formato y validación del input del PIN (sólo dígitos)
-  inputPin?.addEventListener('input', (e) => {
-    const raw = e.target.value.replace(/\D/g, '').slice(0, 6);
-    e.target.value = raw.length > 3 ? `${raw.slice(0, 3)} ${raw.slice(3)}` : raw;
+  // Confirmar importación de tablero entrante por enlace directo (#sync=...)
+  btnConfirmIncoming?.addEventListener('click', () => {
+    if (pendingIncomingData) {
+      importAllKanbanData(pendingIncomingData);
+      if (typeof onSyncSuccessCallback === 'function') {
+        onSyncSuccessCallback();
+      }
+      closeIncomingSyncModal();
+    }
   });
 
-  // Envío del formulario de canje
+  // Envío del formulario de canje (soporta PIN de 6 dígitos o enlace directo pegado)
   formClaim?.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const rawPin = (inputPin?.value || '').replace(/\D/g, '');
-    if (rawPin.length !== 6) return;
+    const rawVal = (inputPin?.value || '').trim();
+    if (!rawVal) return;
 
-    await claimPin(rawPin);
+    await claimPin(rawVal);
   });
+
+  // Comprobar si se abrió la página mediante un enlace de sincronización entrante (#sync=...)
+  checkForIncomingSyncUrl();
+}
+
+/**
+ * Comprueba si la URL actual contiene un hash #sync=... para invocar el asistente de importación.
+ */
+function checkForIncomingSyncUrl() {
+  if (typeof window === 'undefined') return;
+  const hash = window.location.hash;
+  if (hash && hash.includes('sync=')) {
+    const data = decodeSyncPayload(hash);
+    if (data) {
+      // Pequeño retardo para asegurar que el DOM inicial y estilos estén cargados
+      setTimeout(() => {
+        openIncomingSyncModal(data);
+      }, 150);
+    }
+  }
+}
+
+/**
+ * Copia el enlace directo al portapapeles con confirmación visual.
+ */
+async function copyDirectSyncLink() {
+  const feedbackEl = document.getElementById('copy-sync-feedback');
+
+  if (!currentDirectLink) {
+    const payload = exportAllKanbanData();
+    const token = encodeSyncPayload(payload);
+    currentDirectLink = `${window.location.origin}${window.location.pathname}#sync=${token}`;
+  }
+
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(currentDirectLink);
+    } else {
+      // Fallback para navegadores antiguos o contextos no seguros
+      const tempInput = document.createElement('textarea');
+      tempInput.value = currentDirectLink;
+      document.body.appendChild(tempInput);
+      tempInput.select();
+      document.execCommand('copy');
+      document.body.removeChild(tempInput);
+    }
+
+    if (feedbackEl) {
+      feedbackEl.classList.remove('is-hidden');
+      setTimeout(() => {
+        feedbackEl.classList.add('is-hidden');
+      }, 3500);
+    }
+  } catch (err) {
+    // Si falla el acceso al portapapeles, mostrar un prompt para copia manual
+    window.prompt('Copia este enlace de sincronización para tu otro dispositivo:', currentDirectLink);
+  }
 }
 
 /**
@@ -172,7 +301,7 @@ function stopSharingTimers() {
 }
 
 /**
- * Solicita al servidor un nuevo código PIN temporal (5 min).
+ * Solicita al servidor un nuevo código PIN temporal (5 min) y genera el enlace directo.
  */
 async function requestNewPin() {
   stopSharingTimers();
@@ -185,19 +314,24 @@ async function requestNewPin() {
   const expiredBox = document.getElementById('sync-expired-msg');
 
   if (codeBox) codeBox.textContent = '··· ···';
-  if (statusBox) statusBox.textContent = 'Generando código seguro…';
+  if (statusBox) statusBox.textContent = 'Generando opciones de sincronización…';
   if (expiredBox) expiredBox.classList.add('is-hidden');
   if (codeBox) codeBox.classList.remove('is-expired');
 
+  // 1. Generar enlace directo instantáneo (100% Zero-Knowledge y local)
+  const payload = exportAllKanbanData();
+  const token = encodeSyncPayload(payload);
+  currentDirectLink = `${window.location.origin}${window.location.pathname}#sync=${token}`;
+
+  // 2. Intentar registrar PIN temporal en Cloudflare API
   try {
-    const payload = exportAllKanbanData();
     const res = await fetch('/api/sync', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'create', data: payload })
     });
 
-    if (!res.ok) throw new Error('Error al generar código');
+    if (!res.ok) throw new Error('Error al registrar PIN en servidor');
     const result = await res.json();
 
     if (result.success && result.pin) {
@@ -211,7 +345,7 @@ async function requestNewPin() {
       if (statusBox) {
         statusBox.innerHTML = `
           <span class="spinner-dot" aria-hidden="true"></span>
-          Esperando a que introduzcas el código en el otro dispositivo…
+          Esperando a que introduzcas el PIN en tu otro dispositivo…
         `;
       }
 
@@ -219,8 +353,11 @@ async function requestNewPin() {
       startStatusPolling(activePin);
     }
   } catch (err) {
-    console.warn('[KanbanSync] Fallo al crear PIN:', err);
-    if (statusBox) statusBox.textContent = 'No se pudo conectar con el servidor de sincronización.';
+    console.warn('[KanbanSync] Servidor de PIN no disponible, usando modo enlace directo:', err);
+    if (codeBox) codeBox.textContent = 'OFFLINE';
+    if (statusBox) {
+      statusBox.textContent = 'Usa el botón "Copiar enlace de sincronización" para transferir tu tablero sin necesidad de servidor.';
+    }
   }
 }
 
@@ -305,15 +442,17 @@ function showClaimSuccessAnimation() {
 function resetShareView() {
   const contentEl = document.getElementById('sync-share-content');
   const successEl = document.getElementById('sync-share-success');
+  const feedbackEl = document.getElementById('copy-sync-feedback');
   if (contentEl) contentEl.classList.remove('is-hidden');
   if (successEl) successEl.classList.add('is-hidden');
+  if (feedbackEl) feedbackEl.classList.add('is-hidden');
 }
 
 /**
- * Canjea un código PIN introducido en este dispositivo.
- * @param {string} rawPin
+ * Canjea un código PIN de 6 dígitos o un enlace directo pegado en este dispositivo.
+ * @param {string} rawInput
  */
-async function claimPin(rawPin) {
+async function claimPin(rawInput) {
   const btnSubmit = document.getElementById('btn-submit-claim');
   const errorBox = document.getElementById('claim-error-msg');
   const successBox = document.getElementById('claim-success-msg');
@@ -326,16 +465,52 @@ async function claimPin(rawPin) {
   if (successBox) successBox.classList.add('is-hidden');
 
   try {
+    const trimmed = rawInput.trim();
+
+    // 1. Detección de Enlace Directo pegado o Token Base64 (#sync=...)
+    if (trimmed.includes('sync=') || trimmed.length > 20) {
+      const decodedData = decodeSyncPayload(trimmed);
+      if (!decodedData) {
+        throw new Error('El enlace o código de transferencia pegado no es válido o está incompleto.');
+      }
+
+      importAllKanbanData(decodedData);
+
+      if (successBox) {
+        successBox.classList.remove('is-hidden');
+        successBox.textContent = '¡Sincronizado con éxito! Actualizando tu tablero…';
+      }
+
+      if (typeof onSyncSuccessCallback === 'function') {
+        onSyncSuccessCallback();
+      }
+
+      setTimeout(() => {
+        closeSyncModal();
+        if (btnSubmit) {
+          btnSubmit.disabled = false;
+          btnSubmit.textContent = 'Canjear y sincronizar';
+        }
+      }, 1400);
+      return;
+    }
+
+    // 2. Canje mediante código PIN de 6 dígitos
+    const digitsOnly = trimmed.replace(/\D/g, '');
+    if (digitsOnly.length !== 6) {
+      throw new Error('Por favor, introduce los 6 dígitos del PIN o pega el enlace completo.');
+    }
+
     const res = await fetch('/api/sync', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'claim', pin: rawPin })
+      body: JSON.stringify({ action: 'claim', pin: digitsOnly })
     });
 
     const result = await res.json();
 
     if (!res.ok || !result.success) {
-      throw new Error(result.error || 'Código incorrecto o caducado');
+      throw new Error(result.error || 'Código incorrecto o caducado.');
     }
 
     // Guardar los datos recibidos en localStorage

@@ -1319,3 +1319,128 @@ body {
     margin-left: auto;
   }
 }
+
+/* ───────── Estilos de Enlace Directo y Sincronización Instantánea ───────── */
+
+.sync-direct-link-card {
+  width: 100%;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  text-align: left;
+}
+
+.sync-direct-link-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.88rem;
+  color: var(--text);
+}
+
+.sync-method-badge {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: var(--accent);
+  color: #ffffff;
+  padding: 2px 7px;
+  border-radius: 4px;
+}
+
+.sync-direct-desc {
+  font-size: 0.8rem;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.sync-link-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-top: 0.2rem;
+}
+
+.btn-copy-sync-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 8px 14px;
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-copy-sync-link:hover {
+  background: var(--accent);
+  color: #ffffff;
+}
+
+.copy-feedback {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #10b981;
+}
+
+.sync-divider-line {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.75rem;
+  margin: 0.4rem 0 0.2rem;
+}
+
+.sync-divider-line::before,
+.sync-divider-line::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1px solid var(--line);
+}
+
+.sync-divider-line span {
+  padding: 0 0.6rem;
+}
+
+.sync-input-hint {
+  font-size: 0.76rem;
+  color: var(--muted);
+  line-height: 1.4;
+  text-align: center;
+}
+
+.sync-incoming-text {
+  font-size: 0.88rem;
+  color: var(--text);
+  margin-bottom: 0.6rem;
+}
+
+.sync-incoming-stats {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0.6rem 0.8rem;
+  font-size: 0.82rem;
+  color: var(--text);
+  margin-bottom: 0.6rem;
+}
+
+.sync-incoming-warning {
+  font-size: 0.76rem;
+  color: var(--muted);
+  font-style: italic;
+}
+

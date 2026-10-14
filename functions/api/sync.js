@@ -61,7 +61,9 @@ async function saveSyncRecord(env, pin, record, ttlSeconds = PIN_TTL_SECONDS) {
 
   if (env && env.EVENTS_KV) {
     try {
-      await env.EVENTS_KV.put(key, JSON.stringify(record), { expirationTtl: ttlSeconds });
+      // Cloudflare KV exige un TTL mínimo de 60s. Forzamos Math.max(120, ttlSeconds) para evitar 400 por reloj/redondeo.
+      const safeTtl = Math.max(120, Math.round(ttlSeconds));
+      await env.EVENTS_KV.put(key, JSON.stringify(record), { expirationTtl: safeTtl });
       return;
     } catch (e) {
       console.warn('[Sync API] Error al escribir en KV:', e);
@@ -152,10 +154,13 @@ export async function onRequest(context) {
 
         await saveSyncRecord(env, pin, record, PIN_TTL_SECONDS);
 
+        const kvBound = Boolean(env && env.EVENTS_KV);
+
         return new Response(JSON.stringify({
           success: true,
           pin,
-          expiresIn: PIN_TTL_SECONDS
+          expiresIn: PIN_TTL_SECONDS,
+          kvBound
         }), {
           status: 201,
           headers: {
@@ -179,7 +184,16 @@ export async function onRequest(context) {
 
         const record = await getSyncRecord(env, pin);
         if (!record) {
-          return new Response(JSON.stringify({ success: false, error: 'El código ha caducado o no existe' }), {
+          const kvBound = Boolean(env && env.EVENTS_KV);
+          const errorMsg = kvBound
+            ? 'El código PIN ha caducado o no existe.'
+            : 'No se encontró el código. Cloudflare KV no está vinculado en el panel de Cloudflare Pages para comunicar servidores distintos. Utiliza el botón "Copiar enlace directo" o pega el código de transferencia.';
+
+          return new Response(JSON.stringify({
+            success: false,
+            error: errorMsg,
+            kvBound
+          }), {
             status: 404,
             headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
           });
@@ -193,9 +207,9 @@ export async function onRequest(context) {
           });
         }
 
-        // Marcar como reclamado y conservar 60s para que el emisor detecte el cambio en polling
+        // Marcar como reclamado y conservar 120s para que el emisor detecte el cambio en polling
         record.status = 'claimed';
-        await saveSyncRecord(env, pin, record, 60);
+        await saveSyncRecord(env, pin, record, 120);
 
         return new Response(JSON.stringify({
           success: true,

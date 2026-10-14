@@ -250,19 +250,79 @@ export function exportAllKanbanData() {
  * @param {Object} data
  */
 export function importAllKanbanData(data) {
-  if (!data || typeof data !== 'object') return;
+  if (!data || typeof data !== 'object') return false;
 
+  let changed = false;
   if (data.columns && typeof data.columns === 'object') {
     safeStorage.set(STORAGE_KEYS.COLUMNS, data.columns);
+    changed = true;
   }
   if (Array.isArray(data.personalTasks)) {
     safeStorage.set(STORAGE_KEYS.PERSONAL_TASKS, data.personalTasks);
+    changed = true;
   }
   if (Array.isArray(data.stickyNotes)) {
     safeStorage.set(STORAGE_KEYS.STICKY_NOTES, data.stickyNotes);
+    changed = true;
   }
   if (typeof data.notesCollapsed === 'boolean') {
     safeStorage.set(STORAGE_KEYS.NOTES_COLLAPSED, data.notesCollapsed);
   }
+  return changed;
 }
+
+/**
+ * Codifica el paquete de datos del tablero en una cadena Base64 segura para URLs (Unicode UTF-8).
+ * @param {Object} data
+ * @returns {string|null}
+ */
+export function encodeSyncPayload(data) {
+  try {
+    const jsonStr = JSON.stringify(data);
+    const bytes = new TextEncoder().encode(jsonStr);
+    let binStr = '';
+    for (let i = 0; i < bytes.length; i++) {
+      binStr += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binStr);
+  } catch (err) {
+    console.error('[KanbanStore] Error al codificar payload de sincronización:', err);
+    return null;
+  }
+}
+
+/**
+ * Decodifica una cadena Base64 (o enlace completo con #sync=...) en el objeto de datos del tablero.
+ * @param {string} rawString
+ * @returns {Object|null}
+ */
+export function decodeSyncPayload(rawString) {
+  try {
+    let clean = String(rawString || '').trim();
+    if (clean.includes('#sync=')) {
+      clean = clean.split('#sync=')[1];
+    } else if (clean.includes('sync=')) {
+      clean = clean.split('sync=')[1];
+    }
+    // Limpiar caracteres URL no deseados
+    clean = clean.split('&')[0];
+
+    const binStr = atob(clean);
+    const bytes = new Uint8Array(binStr.length);
+    for (let i = 0; i < binStr.length; i++) {
+      bytes[i] = binStr.charCodeAt(i);
+    }
+    const jsonStr = new TextDecoder().decode(bytes);
+    const parsed = JSON.parse(jsonStr);
+
+    if (parsed && typeof parsed === 'object') {
+      return parsed;
+    }
+    return null;
+  } catch (err) {
+    console.warn('[KanbanStore] Payload de sincronización inválido o corrupto:', err);
+    return null;
+  }
+}
+
 

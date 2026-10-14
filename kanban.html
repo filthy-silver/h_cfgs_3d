@@ -247,12 +247,32 @@
       </button>
     </div>
 
-    <!-- Vista 1: Compartir con otro equipo (Genera PIN con cuenta atrás y detección de canje) -->
+    <!-- Vista 1: Compartir con otro equipo (Enlace directo instantáneo o PIN temporal) -->
     <div class="modal-body sync-modal-body" id="view-sync-share">
       <div id="sync-share-content">
         <p class="sync-step-instruction">
-          Escribe este código de un solo uso en tu otro dispositivo para transferir tu tablero:
+          Elige cómo deseas transferir tu tablero a tu otro equipo o móvil:
         </p>
+
+        <!-- Método 1: Enlace directo (Zero-Knowledge, instantáneo y sin servidor) -->
+        <div class="sync-direct-link-card">
+          <div class="sync-direct-link-header">
+            <span class="sync-method-badge">Recomendado</span>
+            <strong>Enlace directo instantáneo</strong>
+          </div>
+          <p class="sync-direct-desc">Ábrelo en tu otro ordenador o móvil para sincronizar tu tablero en 1 clic:</p>
+          <div class="sync-link-actions">
+            <button type="button" class="btn-copy-sync-link" id="btn-copy-sync-link">
+              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+              <span>Copiar enlace de sincronización</span>
+            </button>
+            <span id="copy-sync-feedback" class="copy-feedback is-hidden" aria-live="polite">✓ ¡Copiado al portapapeles!</span>
+          </div>
+        </div>
+
+        <div class="sync-divider-line">
+          <span>o mediante código PIN de 6 dígitos</span>
+        </div>
 
         <div class="sync-pin-container">
           <div class="sync-code-box" id="sync-code-display">··· ···</div>
@@ -288,19 +308,18 @@
     <!-- Vista 2: Canjear código recibido del otro equipo -->
     <div class="modal-body sync-modal-body is-hidden" id="view-sync-claim">
       <p class="sync-step-instruction">
-        Introduce los 6 dígitos generados en tu otro equipo para descargar tu tablero:
+        Introduce el PIN de 6 dígitos o pega el enlace recibido de tu otro equipo:
       </p>
 
       <form id="form-sync-claim" class="sync-claim-form">
         <div class="form-group">
-          <label for="input-claim-pin" class="sr-only">Código PIN de 6 dígitos</label>
+          <label for="input-claim-pin" class="sr-only">Código PIN o enlace de sincronización</label>
           <input
             type="text"
             id="input-claim-pin"
             class="input-claim-code"
             placeholder="000 000"
-            inputmode="numeric"
-            maxlength="7"
+            maxlength="4000"
             autocomplete="off"
             required
           />
@@ -312,11 +331,43 @@
         <button type="submit" class="modal-btn primary btn-claim-submit" id="btn-submit-claim">
           Canjear y sincronizar
         </button>
+
+        <p class="sync-input-hint">
+          💡 Puedes escribir los 6 dígitos o pegar directamente el enlace de sincronización completo.
+        </p>
       </form>
     </div>
 
     <div class="modal-actions">
       <button type="button" class="modal-btn" data-close-sync-modal>Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Confirmar Importación de Tablero Compartido entrante por enlace -->
+<div class="modal-backdrop" id="incoming-sync-modal" role="dialog" aria-modal="true" aria-labelledby="incoming-sync-title" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-header">
+      <div class="modal-title-box">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+          <path fill="currentColor" d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM10 17l-3.5-3.5 1.41-1.41L10 14.17l5.59-5.59L17 10l-7 7z"/>
+        </svg>
+        <h2 class="modal-title" id="incoming-sync-title">Sincronizar Tablero Compartido</h2>
+      </div>
+      <button type="button" class="modal-close" data-close-incoming-sync aria-label="Cerrar diálogo">&times;</button>
+    </div>
+    <div class="modal-body">
+      <p id="incoming-sync-desc" class="sync-incoming-text">
+        Se ha recibido un tablero mediante enlace directo.
+      </p>
+      <div id="incoming-sync-stats" class="sync-incoming-stats"></div>
+      <p class="sync-incoming-warning">
+        Al aceptar, se actualizarán las tareas personales, notas y el estado de las columnas en este navegador.
+      </p>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="modal-btn" data-close-incoming-sync>Cancelar</button>
+      <button type="button" class="modal-btn primary" id="btn-confirm-incoming-sync">Importar y sincronizar</button>
     </div>
   </div>
 </div>
