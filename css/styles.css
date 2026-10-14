@@ -658,6 +658,41 @@ table.has-focus td.break {
   gap: 0.8rem;
 }
 
+.calendar-qr-wrapper {
+  margin: 0.4rem 0;
+  padding: 0.75rem;
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.calendar-qr-box {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 160px;
+  min-width: 160px;
+}
+
+.calendar-qr-box svg {
+  display: block;
+  width: 160px;
+  height: 160px;
+  border-radius: 4px;
+}
+
+.calendar-qr-hint {
+  font-size: 0.75rem;
+  color: #475569;
+  text-align: center;
+  font-weight: 500;
+}
+
 .modal-feed-url {
   display: flex;
   gap: 0.5rem;

@@ -149,6 +149,16 @@ export function initKanbanSync({ onDataRestored } = {}) {
   const btnRegen = document.getElementById('btn-regen-pin');
   const btnConfirmIncoming = document.getElementById('btn-confirm-incoming-sync');
 
+  // Pre-renderizar el código QR visible de inmediato para que ya esté listo al abrir el modal
+  try {
+    const initialPayload = exportAllKanbanData();
+    const initialToken = encodeSyncPayload(initialPayload);
+    currentDirectLink = `${window.location.origin}${window.location.pathname}#sync=${initialToken}`;
+    renderQrCode(currentDirectLink);
+  } catch (err) {
+    console.warn('[KanbanSync] Error al pre-renderizar QR inicial:', err);
+  }
+
   // Delegación global en document para garantizar compatibilidad táctil / móvil
   document.addEventListener('click', (e) => {
     // Abrir modal de sincronización

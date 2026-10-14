@@ -3,6 +3,8 @@
  * @description Diálogo accesible para suscribirse y descargar el feed de calendario iCal (.ics).
  */
 
+import QRCode from '../utils/qrcode.min.js';
+
 export function initCalendarModal() {
   const openBtn = document.getElementById("btn-open-calendar");
   const modal = document.getElementById("calendar-modal");
@@ -12,6 +14,7 @@ export function initCalendarModal() {
   const googleBtn = document.getElementById("btn-add-google");
   const appleBtn = document.getElementById("btn-add-apple");
   const downloadBtn = document.getElementById("btn-download-ics");
+  const qrContainer = document.getElementById("calendar-qr-code-container");
 
   if (!openBtn || !modal) return;
 
@@ -35,6 +38,34 @@ export function initCalendarModal() {
 
   if (appleBtn) {
     appleBtn.href = webcalUrl;
+  }
+
+  // Renderizar código QR del calendario (.ics / webcal://) para escaneo directo con móvil
+  if (qrContainer) {
+    try {
+      const qrFn = typeof QRCode === 'function' ? QRCode : (QRCode?.QRCode || QRCode?.default);
+      if (typeof qrFn === 'function') {
+        const svgEl = qrFn({
+          msg: webcalUrl,
+          dim: 160,
+          pad: 2,
+          pal: ['#0f172a', '#ffffff']
+        });
+        if (svgEl) {
+          const paths = svgEl.querySelectorAll('path');
+          if (paths.length >= 2) {
+            paths[0].setAttribute('fill', '#ffffff');
+            paths[1].setAttribute('fill', '#0f172a');
+          } else if (paths.length === 1) {
+            paths[0].setAttribute('fill', '#0f172a');
+          }
+          qrContainer.innerHTML = '';
+          qrContainer.appendChild(svgEl);
+        }
+      }
+    } catch (err) {
+      console.warn('[CalendarModal] Error al generar QR del calendario:', err);
+    }
   }
 
   function openModal() {
