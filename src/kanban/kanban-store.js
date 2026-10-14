@@ -272,13 +272,99 @@ export function importAllKanbanData(data) {
 }
 
 /**
- * Codifica el paquete de datos del tablero en una cadena Base64 segura para URLs (Unicode UTF-8).
+ * Empaqueta el estado del tablero en un formato compacto minificado para enlaces cortos y QR.
+ * @param {Object} data
+ * @returns {Object}
+ */
+export function packCompactData(data) {
+  if (!data || typeof data !== 'object') return {};
+
+  const compactCols = {};
+  for (const [id, col] of Object.entries(data.columns || {})) {
+    if (col === 'pending') compactCols[id] = 'p';
+    else if (col === 'in-progress') compactCols[id] = 'i';
+    else if (col === 'done') compactCols[id] = 'd';
+    else if (col) compactCols[id] = col;
+  }
+
+  const compactTasks = (data.personalTasks || []).map(t => [
+    t.id || '',
+    t.title || '',
+    t.mod || '',
+    t.date || '',
+    t.time || '23:59',
+    t.notes || ''
+  ]);
+
+  const compactNotes = (data.stickyNotes || []).map(n => [
+    n.id || '',
+    n.text || '',
+    n.color || 'yellow'
+  ]);
+
+  return {
+    _v: 1,
+    c: compactCols,
+    t: compactTasks,
+    n: compactNotes,
+    z: data.notesCollapsed ? 1 : 0
+  };
+}
+
+/**
+ * Desempaqueta el formato compacto minificado a la estructura completa de Kanban.
+ * @param {Object} raw
+ * @returns {Object|null}
+ */
+export function unpackCompactData(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+
+  // Si ya es el formato extendido antiguo, mantener retrocompatibilidad total
+  if (raw.columns || raw.personalTasks) {
+    return raw;
+  }
+
+  const cols = {};
+  for (const [id, val] of Object.entries(raw.c || {})) {
+    if (val === 'p') cols[id] = 'pending';
+    else if (val === 'i') cols[id] = 'in-progress';
+    else if (val === 'd') cols[id] = 'done';
+    else cols[id] = val;
+  }
+
+  const personalTasks = (raw.t || []).map(arr => ({
+    id: arr[0],
+    title: arr[1],
+    mod: arr[2] || null,
+    date: arr[3] || null,
+    time: arr[4] || '23:59',
+    notes: arr[5] || '',
+    type: 'personal'
+  }));
+
+  const stickyNotes = (raw.n || []).map(arr => ({
+    id: arr[0],
+    text: arr[1] || '',
+    color: arr[2] || 'yellow'
+  }));
+
+  return {
+    columns: cols,
+    personalTasks,
+    stickyNotes,
+    notesCollapsed: Boolean(raw.z)
+  };
+}
+
+/**
+ * Codifica el paquete de datos del tablero en una cadena Base64 ultracompacta y segura para URLs y QR.
  * @param {Object} data
  * @returns {string|null}
  */
 export function encodeSyncPayload(data) {
   try {
-    const jsonStr = JSON.stringify(data);
+    const compact = packCompactData(data);
+    const jsonStr = JSON.stringify(compact);
     const bytes = new TextEncoder().encode(jsonStr);
     let binStr = '';
     for (let i = 0; i < bytes.length; i++) {
@@ -316,7 +402,7 @@ export function decodeSyncPayload(rawString) {
     const parsed = JSON.parse(jsonStr);
 
     if (parsed && typeof parsed === 'object') {
-      return parsed;
+      return unpackCompactData(parsed);
     }
     return null;
   } catch (err) {

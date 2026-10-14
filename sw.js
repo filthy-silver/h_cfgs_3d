@@ -3,7 +3,7 @@
  * @description Service Worker con estrategia Network-First para navegación y Stale-While-Revalidate para recursos estáticos.
  */
 
-const CACHE_NAME = 'horario-v9';
+const CACHE_NAME = 'horario-v10';
 
 const STATIC_ASSETS = [
   './',
@@ -25,6 +25,7 @@ const STATIC_ASSETS = [
   './src/ui/calendar-modal.js',
   './src/ui/assignments-view.js',
   './src/ui/admin-modal.js',
+  './src/utils/qrcode.min.js',
   './src/kanban/kanban.js',
   './src/kanban/kanban-store.js',
   './src/kanban/kanban-cards.js',

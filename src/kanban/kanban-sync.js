@@ -11,6 +11,7 @@ import {
   encodeSyncPayload,
   decodeSyncPayload
 } from './kanban-store.js';
+import QRCode from '../utils/qrcode.min.js';
 
 let activePin = null;
 let currentDirectLink = '';
@@ -148,6 +149,9 @@ export function initKanbanSync({ onDataRestored } = {}) {
   const btnRegen = document.getElementById('btn-regen-pin');
   const btnCopyLink = document.getElementById('btn-copy-sync-link');
   const btnConfirmIncoming = document.getElementById('btn-confirm-incoming-sync');
+  const btnToggleQr = document.getElementById('btn-toggle-qr');
+  const qrWrapper = document.getElementById('sync-qr-wrapper');
+  const btnToggleQrText = document.getElementById('btn-toggle-qr-text');
 
   // Delegación global en document para garantizar compatibilidad táctil / móvil
   document.addEventListener('click', (e) => {
@@ -204,6 +208,25 @@ export function initKanbanSync({ onDataRestored } = {}) {
   // Botón: Copiar enlace directo instantáneo
   btnCopyLink?.addEventListener('click', () => {
     copyDirectSyncLink();
+  });
+
+  // Botón: Alternar visualización del código QR
+  btnToggleQr?.addEventListener('click', () => {
+    if (!qrWrapper) return;
+    const isHidden = qrWrapper.classList.contains('is-hidden');
+    if (isHidden) {
+      if (!currentDirectLink) {
+        const payload = exportAllKanbanData();
+        const token = encodeSyncPayload(payload);
+        currentDirectLink = `${window.location.origin}${window.location.pathname}#sync=${token}`;
+      }
+      renderQrCode(currentDirectLink);
+      qrWrapper.classList.remove('is-hidden');
+      if (btnToggleQrText) btnToggleQrText.textContent = 'Ocultar QR';
+    } else {
+      qrWrapper.classList.add('is-hidden');
+      if (btnToggleQrText) btnToggleQrText.textContent = 'Ver QR';
+    }
   });
 
   // Regenerar PIN si caducó
@@ -323,6 +346,11 @@ async function requestNewPin() {
   const token = encodeSyncPayload(payload);
   currentDirectLink = `${window.location.origin}${window.location.pathname}#sync=${token}`;
 
+  const qrWrapper = document.getElementById('sync-qr-wrapper');
+  if (qrWrapper && !qrWrapper.classList.contains('is-hidden')) {
+    renderQrCode(currentDirectLink);
+  }
+
   // 2. Intentar registrar PIN temporal en Cloudflare API
   try {
     const res = await fetch('/api/sync', {
@@ -437,15 +465,41 @@ function showClaimSuccessAnimation() {
 }
 
 /**
+ * Renderiza el código QR en formato SVG puro dentro del contenedor de la interfaz.
+ * @param {string} url
+ */
+function renderQrCode(url) {
+  const container = document.getElementById('sync-qr-code-container');
+  if (!container || !url) return;
+  container.innerHTML = '';
+  try {
+    const svgEl = QRCode({
+      msg: url,
+      dim: 170,
+      pad: 2,
+      pal: ['#101828', '#ffffff']
+    });
+    container.appendChild(svgEl);
+  } catch (err) {
+    console.warn('[KanbanSync] Error al renderizar código QR:', err);
+  }
+}
+
+/**
  * Restaura la vista normal de compartir código.
  */
 function resetShareView() {
   const contentEl = document.getElementById('sync-share-content');
   const successEl = document.getElementById('sync-share-success');
   const feedbackEl = document.getElementById('copy-sync-feedback');
+  const qrWrapper = document.getElementById('sync-qr-wrapper');
+  const btnToggleQrText = document.getElementById('btn-toggle-qr-text');
+
   if (contentEl) contentEl.classList.remove('is-hidden');
   if (successEl) successEl.classList.add('is-hidden');
   if (feedbackEl) feedbackEl.classList.add('is-hidden');
+  if (qrWrapper) qrWrapper.classList.add('is-hidden');
+  if (btnToggleQrText) btnToggleQrText.textContent = 'Ver QR';
 }
 
 /**

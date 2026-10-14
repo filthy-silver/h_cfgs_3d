@@ -13,8 +13,7 @@ ENVIRONMENT = "production"
 TZ = "Europe/Madrid"
 
 # Almacenamiento distribuido KV para exámenes (/api/events) y vinculación de dispositivos (/api/sync)
-# Para crearlo en Cloudflare CLI: npx wrangler kv:namespace create EVENTS_KV
 [[kv_namespaces]]
 binding = "EVENTS_KV"
-id = "REEMPLAZAR_CON_KV_ID"
-preview_id = "REEMPLAZAR_CON_KV_PREVIEW_ID"
+id = "578b0b0f295d45a5ac766ff9dcab596c"
+

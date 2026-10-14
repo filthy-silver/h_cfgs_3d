@@ -254,19 +254,31 @@
           Elige cómo deseas transferir tu tablero a tu otro equipo o móvil:
         </p>
 
-        <!-- Método 1: Enlace directo (Zero-Knowledge, instantáneo y sin servidor) -->
+        <!-- Método 1: Enlace directo y QR (Zero-Knowledge, instantáneo y sin servidor) -->
         <div class="sync-direct-link-card">
           <div class="sync-direct-link-header">
             <span class="sync-method-badge">Recomendado</span>
-            <strong>Enlace directo instantáneo</strong>
+            <strong>Enlace directo o código QR</strong>
           </div>
-          <p class="sync-direct-desc">Ábrelo en tu otro ordenador o móvil para sincronizar tu tablero en 1 clic:</p>
+          <p class="sync-direct-desc">Ábrelo o escanéalo con tu móvil u otro ordenador para sincronizar en 1 clic:</p>
           <div class="sync-link-actions">
-            <button type="button" class="btn-copy-sync-link" id="btn-copy-sync-link">
+            <button type="button" class="btn-copy-sync-link" id="btn-copy-sync-link" title="Copiar enlace al portapapeles">
               <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
-              <span>Copiar enlace de sincronización</span>
+              <span>Copiar enlace</span>
             </button>
-            <span id="copy-sync-feedback" class="copy-feedback is-hidden" aria-live="polite">✓ ¡Copiado al portapapeles!</span>
+
+            <button type="button" class="btn-toggle-qr" id="btn-toggle-qr" title="Mostrar u ocultar código QR">
+              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M3 3h8v8H3V3zm2 2v4h4V5H5zm8-2h8v8h-8V3zm2 2v4h4V5h-4zM3 13h8v8H3v-8zm2 2v4h4v-4H5zm13-2h3v2h-3v-2zm-2 2h2v2h-2v-2zm2 2h3v4h-2v-2h-1v-2zm-2 2h2v2h-2v-2zm0-4h2v2h-2v-2z"/></svg>
+              <span id="btn-toggle-qr-text">Ver QR</span>
+            </button>
+
+            <span id="copy-sync-feedback" class="copy-feedback is-hidden" aria-live="polite">✓ ¡Copiado!</span>
+          </div>
+
+          <!-- Contenedor desplegable del Código QR -->
+          <div id="sync-qr-wrapper" class="sync-qr-wrapper is-hidden">
+            <div id="sync-qr-code-container" class="sync-qr-box"></div>
+            <span class="sync-qr-hint">Escanea con la cámara de tu móvil para sincronizar el tablero</span>
           </div>
         </div>
 
