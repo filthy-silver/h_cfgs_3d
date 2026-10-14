@@ -14,9 +14,15 @@ export const TIME_BOUNDARIES = [
   "21:35"
 ];
 
-export const BREAK_SLOT_INDEX = 3; // 18:30 - 18:50
-export const SCHOOL_DAY_START_MINUTES = 15 * 60 + 45; // 15:45 (945 minutos)
-export const SCHOOL_DAY_END_MINUTES = 21 * 60 + 35;   // 21:35 (1295 minutos)
+export const BREAK_SLOT_INDEX = 3; // 18:30 - 18:50 (retrocompatibilidad)
+export const BREAK_SLOT_INDEXES = [3]; // Soporte para múltiples descansos o cursos sin descanso
+function timeToMinutes(str) {
+  const [h, m] = str.split(':').map(Number);
+  return h * 60 + m;
+}
+
+export const SCHOOL_DAY_START_MINUTES = timeToMinutes(TIME_BOUNDARIES[0]);
+export const SCHOOL_DAY_END_MINUTES = timeToMinutes(TIME_BOUNDARIES[TIME_BOUNDARIES.length - 1]);
 
 export const DAYS_CONFIG = [
   { id: 1, name: "Lunes", shortName: "Lun" },

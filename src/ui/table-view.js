@@ -6,6 +6,7 @@
 import {
   TIME_BOUNDARIES,
   BREAK_SLOT_INDEX,
+  BREAK_SLOT_INDEXES,
   DAYS_CONFIG,
   SUBJECTS
 } from '../data/schedule.data.js';
@@ -23,6 +24,7 @@ export function renderTableView(eventsByDay) {
   tbody.innerHTML = "";
 
   const totalSlots = TIME_BOUNDARIES.length - 1;
+  const breakList = Array.isArray(BREAK_SLOT_INDEXES) ? BREAK_SLOT_INDEXES : [BREAK_SLOT_INDEX];
 
   for (let p = 0; p < totalSlots; p++) {
     const tr = document.createElement("tr");
@@ -34,7 +36,7 @@ export function renderTableView(eventsByDay) {
     timeTd.textContent = `${TIME_BOUNDARIES[p]}–${TIME_BOUNDARIES[p + 1]}`;
     tr.appendChild(timeTd);
 
-    if (p === BREAK_SLOT_INDEX) {
+    if (breakList.includes(p)) {
       // Fila especial de recreo
       const breakTd = document.createElement("td");
       breakTd.className = "break";

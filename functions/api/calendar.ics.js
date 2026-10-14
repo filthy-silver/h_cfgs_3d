@@ -3,34 +3,11 @@
  * @description Cloudflare Pages Function que genera dinámicamente el feed RFC 5545 iCalendar (.ics).
  */
 
-const TIME_BOUNDARIES = [
-  "15:45",
-  "16:40",
-  "17:35",
-  "18:30",
-  "18:50",
-  "19:45",
-  "20:40",
-  "21:35"
-];
-
-const SUBJECTS = {
-  proye:  { name: "Realización de proyectos",      meta: "PTS 06 · INF-1",              location: "Aula INF-1" },
-  color:  { name: "Color, iluminación y acabados", meta: "PTS 01 / PTS 04 · INF-1",     location: "Aula INF-1" },
-  dibujo: { name: "Diseño, dibujo y modelado",     meta: "PS SO 01 / PS SO 03 · INF-1", location: "Aula INF-1" },
-  anim:   { name: "Animación de elementos",        meta: "PS SO 01 / PS SO 02 · INF-1", location: "Aula INF-1" },
-  fol:    { name: "Itinerario personal",           meta: "FOL 04 · POLI 2",             location: "POLI 2" },
-  inter:  { name: "Proyecto intermodular",         meta: "PS SO 03 · INF-1",            location: "Aula INF-1" },
-  ingles: { name: "Inglés profesional",            meta: "ANG 02 · ANG 1",              location: "Aula ANG 1" }
-};
-
-const SCHEDULE = {
-  1: [["proye", 0, 1], ["color", 1, 3], ["dibujo", 4, 7]],
-  2: [["fol", 0, 1], ["inter", 1, 2], ["proye", 2, 3], ["proye", 4, 6], ["ingles", 6, 7]],
-  3: [["color", 0, 3], ["fol", 4, 5], ["proye", 5, 7]],
-  4: [["anim", 0, 3], ["anim", 4, 5], ["ingles", 5, 6], ["fol", 6, 7, "FOL 04 · POLI 1"]],
-  5: [["anim", 0, 3], ["anim", 4, 5], ["dibujo", 5, 7]]
-};
+import {
+  TIME_BOUNDARIES,
+  SUBJECTS,
+  WEEKLY_SCHEDULE_RAW
+} from '../../src/data/schedule.data.js';
 
 const DAY_MAP = {
   1: { byDay: "MO", anchorDate: "20260914" },
@@ -124,21 +101,21 @@ export function generateIcsFeed() {
   // Fecha fin del curso académico lectivo (finales de junio de 2027)
   const untilDate = "20270630T235959Z";
 
-  for (const [dayStr, blocks] of Object.entries(SCHEDULE)) {
+  for (const [dayStr, blocks] of Object.entries(WEEKLY_SCHEDULE_RAW)) {
     const day = parseInt(dayStr, 10);
     const dayInfo = DAY_MAP[day];
     if (!dayInfo) continue;
 
-    blocks.forEach(([mod, from, to, metaOverride], index) => {
-      const subject = SUBJECTS[mod] || { name: mod, meta: "", location: "Centro Educativo" };
-      const startTime = TIME_BOUNDARIES[from];
-      const endTime = TIME_BOUNDARIES[to];
-      const meta = metaOverride || subject.meta;
-      const location = metaOverride ? metaOverride.split('·')[1]?.trim() || subject.location : subject.location;
+    blocks.forEach((item, index) => {
+      const subject = SUBJECTS[item.mod] || { name: item.mod, meta: "", location: "Centro Educativo" };
+      const startTime = TIME_BOUNDARIES[item.from];
+      const endTime = TIME_BOUNDARIES[item.to];
+      const meta = item.meta || subject.meta;
+      const location = meta.includes('·') ? meta.split('·')[1].trim() : (subject.location || "Aula");
 
       const dtStart = formatIcsTime(dayInfo.anchorDate, startTime);
       const dtEnd = formatIcsTime(dayInfo.anchorDate, endTime);
-      const uid = `cfgs3d-d${day}-s${from}-${to}-${mod}-${index}@horario.pages.dev`;
+      const uid = `cfgs3d-d${day}-s${item.from}-${item.to}-${item.mod}-${index}@horario.pages.dev`;
 
       lines.push("BEGIN:VEVENT");
       lines.push(`UID:${uid}`);

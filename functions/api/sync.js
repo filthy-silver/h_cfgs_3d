@@ -57,6 +57,8 @@ async function getSyncRecord(env, pin) {
  */
 async function saveSyncRecord(env, pin, record, ttlSeconds = PIN_TTL_SECONDS) {
   const key = `sync_pin_${pin}`;
+  record.expiresAt = Date.now() + (ttlSeconds * 1000);
+
   if (env && env.EVENTS_KV) {
     try {
       await env.EVENTS_KV.put(key, JSON.stringify(record), { expirationTtl: ttlSeconds });
@@ -66,7 +68,6 @@ async function saveSyncRecord(env, pin, record, ttlSeconds = PIN_TTL_SECONDS) {
     }
   }
 
-  record.expiresAt = Date.now() + (ttlSeconds * 1000);
   inMemorySyncStore.set(key, record);
 }
 
@@ -180,6 +181,14 @@ export async function onRequest(context) {
         if (!record) {
           return new Response(JSON.stringify({ success: false, error: 'El código ha caducado o no existe' }), {
             status: 404,
+            headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
+          });
+        }
+
+        // Si ya fue reclamado por otro receptor, rechazar el doble canje
+        if (record.status === 'claimed') {
+          return new Response(JSON.stringify({ success: false, error: 'Este código ya ha sido canjeado' }), {
+            status: 410,
             headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
           });
         }
