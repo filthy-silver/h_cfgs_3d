@@ -1394,44 +1394,6 @@ body {
   color: #10b981;
 }
 
-.btn-toggle-qr {
-  display: inline-flex;
-  align-items: center;
-.sync-qr-wrapper {
-  margin: 0.75rem 0;
-  padding: 0.85rem;
-  background: #ffffff;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.5rem;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.09);
-}
-
-.sync-qr-box {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  min-height: 180px;
-  min-width: 180px;
-}
-
-.sync-qr-box svg {
-  display: block;
-  width: 180px;
-  height: 180px;
-  border-radius: 4px;
-}
-
-.sync-qr-hint {
-  font-size: 0.75rem;
-  color: #475569;
-  text-align: center;
-  font-weight: 500;
-}
-
 .sync-divider-line {
   width: 100%;
   display: flex;

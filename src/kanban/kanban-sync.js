@@ -11,7 +11,6 @@ import {
   encodeSyncPayload,
   decodeSyncPayload
 } from './kanban-store.js';
-import QRCode from '../utils/qrcode.min.js';
 
 let activePin = null;
 let currentDirectLink = '';
@@ -149,14 +148,13 @@ export function initKanbanSync({ onDataRestored } = {}) {
   const btnRegen = document.getElementById('btn-regen-pin');
   const btnConfirmIncoming = document.getElementById('btn-confirm-incoming-sync');
 
-  // Pre-renderizar el código QR visible de inmediato para que ya esté listo al abrir el modal
+  // Pre-calcular el enlace directo instantáneo para copia rápida
   try {
     const initialPayload = exportAllKanbanData();
     const initialToken = encodeSyncPayload(initialPayload);
     currentDirectLink = `${window.location.origin}${window.location.pathname}#sync=${initialToken}`;
-    renderQrCode(currentDirectLink);
   } catch (err) {
-    console.warn('[KanbanSync] Error al pre-renderizar QR inicial:', err);
+    console.warn('[KanbanSync] Error al preparar enlace inicial:', err);
   }
 
   // Delegación global en document para garantizar compatibilidad táctil / móvil
@@ -335,10 +333,7 @@ async function requestNewPin() {
   const token = encodeSyncPayload(payload);
   currentDirectLink = `${window.location.origin}${window.location.pathname}#sync=${token}`;
 
-  // 2. Renderizar código QR visible al instante
-  renderQrCode(currentDirectLink);
-
-  // 3. Intentar registrar PIN temporal en Cloudflare API
+  // 2. Intentar registrar PIN temporal en Cloudflare API
   try {
     const res = await fetch('/api/sync', {
       method: 'POST',
@@ -451,42 +446,6 @@ function showClaimSuccessAnimation() {
   }, 1600);
 }
 
-/**
- * Renderiza el código QR en formato SVG puro dentro del contenedor de la interfaz.
- * @param {string} url
- */
-function renderQrCode(url) {
-  const container = document.getElementById('sync-qr-code-container');
-  if (!container || !url) return;
-  container.innerHTML = '';
-  try {
-    const qrFn = typeof QRCode === 'function' ? QRCode : (QRCode?.QRCode || QRCode?.default);
-    if (typeof qrFn !== 'function') {
-      throw new Error('Función QRCode no resuelta');
-    }
-    const svgEl = qrFn({
-      msg: url,
-      dim: 180,
-      pad: 2,
-      pal: ['#0f172a', '#ffffff']
-    });
-
-    if (svgEl) {
-      // Blindaje contra variables CSS y Dark Mode: fijar fills explícitos en los paths
-      const paths = svgEl.querySelectorAll('path');
-      if (paths.length >= 2) {
-        paths[0].setAttribute('fill', '#ffffff');
-        paths[1].setAttribute('fill', '#0f172a');
-      } else if (paths.length === 1) {
-        paths[0].setAttribute('fill', '#0f172a');
-      }
-      container.appendChild(svgEl);
-    }
-  } catch (err) {
-    console.warn('[KanbanSync] Error al renderizar código QR:', err);
-    container.innerHTML = '<span style="font-size:0.75rem;color:var(--muted)">Usa el botón "Copiar enlace" o el código PIN</span>';
-  }
-}
 
 /**
  * Restaura la vista normal de compartir código.
